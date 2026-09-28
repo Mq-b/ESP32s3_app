@@ -1,0 +1,30 @@
+# ESP32-S3 最小工程
+
+ESP-IDF v6.1，目标 ESP32-S3。`main/main.cpp` 为 C++20 应用入口，`app_main` 使用 ESP-IDF 所需的 C 链接约定。无需开发板即可编译固件。
+
+## 直接使用 CMake
+
+在已配置本机 `CMakeUserPresets.json` 的项目目录中：
+
+```powershell
+cmake --preset esp32s3
+cmake --build --preset esp32s3
+```
+
+固件输出到 `build-cmake/esp32s3_app.bin`。`CMakeUserPresets.json` 包含本机 IDF、Python、编译器路径，是个人配置，不纳入 Git；换电脑时请依据本机安装路径重新创建。仓库中的 `CMakePresets.json` 是通用入口，不包含个人路径。
+
+## 使用 IDF 环境编译
+
+PowerShell 中先激活本机 ESP-IDF 安装脚本，再运行 `idf.py build`。本机脚本位置为 `C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1`，示例：
+
+```powershell
+$env:PROCESSOR_ARCHITECTURE = 'AMD64'
+. 'C:\Espressif\tools\Microsoft.v6.1.PowerShell_profile.ps1'
+idf.py build
+```
+
+本机普通终端缺少 `PROCESSOR_ARCHITECTURE` 时，IDF 会报 `Support for platform 'Windows-' hasn't been added yet.`，因此在激活前补齐。固件输出到 `build/esp32s3_app.bin`。以上命令只编译，不烧录。
+
+## VS Code ESP-IDF 插件
+
+用 VS Code 打开本项目目录（不要打开其上级目录）。本机 `.vscode/settings.json` 指向已安装的 IDF 配置及 `esp32s3` CMake Preset，属于个人配置，已忽略。插件 v2.3.0 所需的 `idf.eimIdfJsonPath` 是 VS Code 用户级设置，应指向本机安装器生成的 `eim_idf.json`，也不纳入 Git。
