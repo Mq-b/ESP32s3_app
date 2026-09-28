@@ -1,4 +1,4 @@
 CompileFlags:
   CompilationDatabase: build-cmake
-  Remove: [-std=*]
+  Remove: [-std=*, -fno-shrink-wrap, -fstrict-volatile-bitfields, -fno-tree-switch-conversion]
   Add: [-std=c++23]

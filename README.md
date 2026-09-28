@@ -32,3 +32,5 @@ idf.py build
 ## clangd
 
 项目的 `.clangd` 使用 `build-cmake/compile_commands.json` 提供 ESP-IDF 的真实头文件和宏配置，并将 clangd 的语言解析标准设置为 C++23。先执行一次上述 CMake 构建以生成编译数据库。此设置只影响 clangd 的诊断和补全，实际固件仍按 C++20 编译；不要仅凭 clangd 通过就使用 C++23 特性。
+
+> clangd 红色误报处理：`.vscode/settings.json` 为 clangd 配置了 ESP32-S3 的交叉编译器 `--query-driver`，让 clangd 使用 Xtensa 工具链的 C++ 标准库头文件，而不是 Windows 主机头文件。该文件包含本机路径，已被 `.gitignore` 忽略。修改后请执行 **命令面板 → clangd: Restart language server**。
