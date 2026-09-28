@@ -1,0 +1,4 @@
+CompileFlags:
+  CompilationDatabase: build-cmake
+  Remove: [-std=*]
+  Add: [-std=c++23]

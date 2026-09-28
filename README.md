@@ -28,3 +28,7 @@ idf.py build
 ## VS Code ESP-IDF 插件
 
 用 VS Code 打开本项目目录（不要打开其上级目录）。本机 `.vscode/settings.json` 指向已安装的 IDF 配置及 `esp32s3` CMake Preset，属于个人配置，已忽略。插件 v2.3.0 所需的 `idf.eimIdfJsonPath` 是 VS Code 用户级设置，应指向本机安装器生成的 `eim_idf.json`，也不纳入 Git。
+
+## clangd
+
+项目的 `.clangd` 使用 `build-cmake/compile_commands.json` 提供 ESP-IDF 的真实头文件和宏配置，并将 clangd 的语言解析标准设置为 C++23。先执行一次上述 CMake 构建以生成编译数据库。此设置只影响 clangd 的诊断和补全，实际固件仍按 C++20 编译；不要仅凭 clangd 通过就使用 C++23 特性。
