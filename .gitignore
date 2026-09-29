@@ -6,6 +6,8 @@
 /dependencies.lock
 /*.log
 /.vscode/
+/CMakePresets.json
 /CMakeUserPresets.json
 /.cache/
 /data/wifi.json
+.workbuddy
