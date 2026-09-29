@@ -79,6 +79,8 @@ http://192.168.0.10/
 
 ## flash 分区布局（8MB）
 
+![flash layout](./images/flash_layout.svg)
+
 | 地址 | 分区 | 大小 | 用途 |
 |---|---|---|---|
 | 0x0 | bootloader | 32KB | 上电第一段代码 |
