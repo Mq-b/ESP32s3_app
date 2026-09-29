@@ -1,0 +1,7 @@
+{
+  "ssid": "your-ssid",
+  "password": "your-password",
+  "static_ip": "192.168.0.10",
+  "gateway": "192.168.0.1",
+  "netmask": "255.255.255.0"
+}
