@@ -1,1 +1,38 @@
-{"version":3}
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "esp32s3",
+      "displayName": "ESP32-S3 (ESP-IDF v6.1)",
+      "description": "使用 ESP-IDF v6.1 的 xtensa 工具链配置 ESP32-S3 工程",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/esp32s3",
+      "toolchainFile": "$env{IDF_PATH}/tools/cmake/toolchain-esp32s3.cmake",
+      "environment": {
+        "IDF_PATH": "E:/ESP32-S3/tools/v6.1/esp-idf",
+        "IDF_TOOLS_PATH": "C:/Espressif/tools",
+        "IDF_PYTHON_ENV_PATH": "C:/Espressif/tools/python/v6.1/venv",
+        "PROCESSOR_ARCHITECTURE": "AMD64",
+        "PATH": "C:/Espressif/tools/python/v6.1/venv/Scripts;C:/Espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin;C:/Espressif/tools/ninja/1.12.1;C:/Espressif/tools/ccache/4.12.1/ccache-4.12.1-windows-x86_64;C:/Espressif/tools/cmake/4.0.3/bin;$penv{PATH}",
+        "ESP_ROM_ELF_DIR": "C:/Espressif/tools/esp-rom-elfs/20241011"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "PYTHON": "C:/Espressif/tools/python/v6.1/venv/Scripts/python.exe"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "esp32s3",
+      "displayName": "构建 ESP32-S3",
+      "configurePreset": "esp32s3"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
 CompileFlags:
-  CompilationDatabase: build-cmake
+  CompilationDatabase: build/esp32s3
   Remove: [-std=*, -fno-shrink-wrap, -fstrict-volatile-bitfields, -fno-tree-switch-conversion]
   Add: [-std=c++23]
