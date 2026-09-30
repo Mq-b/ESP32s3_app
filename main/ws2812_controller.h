@@ -68,6 +68,18 @@ public:
      */
     Ws2812Mode mode() const;
 
+    /**
+     * @brief 设置当前 RGB 颜色。
+     * @param color 要保存的 RGB 颜色；常亮或闪烁模式下会立即应用。
+     */
+    void setColor(Ws2812Color color);
+
+    /**
+     * @brief 获取当前 RGB 颜色。
+     * @return 当前保存的 RGB 颜色。
+     */
+    Ws2812Color color() const;
+
 private:
     static void taskEntry(void *arg);
     void taskLoop();

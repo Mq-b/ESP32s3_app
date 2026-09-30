@@ -3,6 +3,7 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -34,6 +35,8 @@ label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-sele
 .card { background: #1e293b; border: 1px solid #2c3a52; border-radius: 14px; overflow: hidden; }
 .ledbar { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 12px 14px; }
 .ledbar span { color: #94a3b8; font-size: 13px; margin-right: auto; }
+.color-picker { width: 42px; height: 32px; padding: 2px; border: 1px solid #3b4d6d; border-radius: 8px; background: #263852; cursor: pointer; }
+.rgb-value { min-width: 92px; margin-right: 4px !important; font-family: ui-monospace, Consolas, monospace; font-size: 12px !important; }
 button { border: 1px solid #3b4d6d; border-radius: 8px; background: #263852; color: #cbd5e1; padding: 7px 12px; cursor: pointer; }
 button:hover, button.active { background: #0369a1; border-color: #38bdf8; color: white; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -53,6 +56,8 @@ tbody tr:hover { background: #243149; }
   <div class="bar"><span class="dot"></span><span id="status">准备中…</span><label style="margin-left:auto"><input type="checkbox" id="auto" checked>持续扫描</label></div>
   <div class="card ledbar">
     <span>板载 WS2812：<b id="ledStatus">读取中…</b></span>
+    <input class="color-picker" id="ledColor" type="color" value="#101010" title="选择 RGB 颜色">
+    <span class="rgb-value" id="rgbValue">RGB(16, 16, 16)</span>
     <button data-mode="off">关闭</button><button data-mode="on">常亮</button><button data-mode="blink">闪烁</button>
   </div>
   <div class="card"><table><thead><tr><th>IP 地址</th><th>MAC 地址</th><th>系统</th><th>延迟</th><th>来源</th></tr></thead><tbody id="rows"></tbody></table><div class="empty" id="empty">正在扫描网段…</div></div>
@@ -62,8 +67,15 @@ const $ = id => document.getElementById(id);
 const badge = os => { if (os.startsWith('Windows')) return ['win', 'Windows']; if (os.startsWith('Linux')) return ['nix', 'Linux / macOS']; if (os.startsWith('Network')) return ['net', '网络设备']; if (os.startsWith('ESP32')) return ['esp', 'ESP32-S3']; return ['unk', os || '未知']; };
 function row(v) { const [cls, label] = badge(v.os); return '<tr><td class="mono">' + v.ip + '</td><td class="mono">' + v.mac + '</td><td><span class="badge ' + cls + '" title="TTL ' + v.ttl + '">' + label + '</span></td><td class="mono">' + (v.ping ? v.rtt_ms + ' ms' : '—') + '</td><td class="dim">' + (v.ping ? 'ICMP' : 'ARP') + '</td></tr>'; }
 async function refresh() { try { const j = await (await fetch('/api/devices', { cache: 'no-store' })).json(); $('rows').innerHTML = j.devices.map(row).join(''); $('empty').style.display = j.count ? 'none' : 'block'; $('status').textContent = j.scanning ? '扫描中…' : '空闲'; $('sub').textContent = 'ESP32-S3 · ' + location.hostname + ' · ' + j.count + ' 台设备'; if (!j.scanning && $('auto').checked) fetch('/api/scan', { method: 'POST' }).catch(() => {}); } catch (e) { $('status').textContent = '连接失败'; } }
-async function refreshLed() { try { const j = await (await fetch('/api/led', { cache: 'no-store' })).json(); const labels = { off: '关闭', on: '常亮', blink: '闪烁' }; $('ledStatus').textContent = labels[j.mode] || '未知'; document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === j.mode)); } catch (e) { $('ledStatus').textContent = '连接失败'; } }
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', async () => { await fetch('/api/led?mode=' + b.dataset.mode, { method: 'POST' }); refreshLed(); }));
+let ledMode = 'off';
+function hexColor(r, g, b) { return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''); }
+function selectedRgb() { const hex = $('ledColor').value; return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]; }
+function showColor(r, g, b) { $('ledColor').value = hexColor(r, g, b); $('rgbValue').textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')'; }
+async function setLed(mode) { const [r, g, b] = selectedRgb(); await fetch('/api/led?mode=' + mode + '&r=' + r + '&g=' + g + '&b=' + b, { method: 'POST' }); await refreshLed(); }
+async function refreshLed() { try { const j = await (await fetch('/api/led', { cache: 'no-store' })).json(); const labels = { off: '关闭', on: '常亮', blink: '闪烁' }; ledMode = j.mode; $('ledStatus').textContent = labels[j.mode] || '未知'; showColor(j.r, j.g, j.b); document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === j.mode)); } catch (e) { $('ledStatus').textContent = '连接失败'; } }
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setLed(b.dataset.mode).catch(() => refreshLed())));
+$('ledColor').addEventListener('input', () => { const [r, g, b] = selectedRgb(); $('rgbValue').textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')'; });
+$('ledColor').addEventListener('change', () => setLed(ledMode).catch(() => refreshLed()));
 fetch('/api/scan', { method: 'POST' }).catch(() => {}); refresh(); refreshLed(); setInterval(refresh, 2000); setInterval(refreshLed, 2000);
 </script>
 </body>
@@ -104,9 +116,39 @@ const char *ledModeName(Ws2812Mode mode) {
     return "off";
 }
 
+bool readColorParameter(const char *query, const char *key, uint8_t &value) {
+    char text[4] = {};
+    if (httpd_query_key_value(query, key, text, sizeof(text)) != ESP_OK) {
+        return false;
+    }
+
+    char *end = nullptr;
+    const unsigned long parsed = strtoul(text, &end, 10);
+    if (end == text || *end != '\0' || parsed > 255) {
+        return false;
+    }
+    value = static_cast<uint8_t>(parsed);
+    return true;
+}
+
+bool readRequestedColor(const char *query, Ws2812Color &color) {
+    const bool hasRed = strstr(query, "r=") != nullptr;
+    const bool hasGreen = strstr(query, "g=") != nullptr;
+    const bool hasBlue = strstr(query, "b=") != nullptr;
+    if (!hasRed && !hasGreen && !hasBlue) {
+        return true;
+    }
+    return hasRed && hasGreen && hasBlue && readColorParameter(query, "r", color.red) &&
+           readColorParameter(query, "g", color.green) && readColorParameter(query, "b", color.blue);
+}
+
 esp_err_t ledStatusHandler(httpd_req_t *req) {
     auto *led = static_cast<Ws2812Controller *>(req->user_ctx);
-    const std::string response = std::string("{\"mode\":\"") + ledModeName(led->mode()) + "\"}";
+    const Ws2812Color color = led->color();
+    const std::string response = std::string("{\"mode\":\"") + ledModeName(led->mode()) +
+                                 "\",\"r\":" + std::to_string(color.red) +
+                                 ",\"g\":" + std::to_string(color.green) +
+                                 ",\"b\":" + std::to_string(color.blue) + "}";
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_send(req, response.c_str(), response.size());
@@ -114,7 +156,7 @@ esp_err_t ledStatusHandler(httpd_req_t *req) {
 }
 
 esp_err_t ledControlHandler(httpd_req_t *req) {
-    char query[32] = {};
+    char query[64] = {};
     char mode[16] = {};
     auto *led = static_cast<Ws2812Controller *>(req->user_ctx);
     if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
@@ -123,12 +165,19 @@ esp_err_t ledControlHandler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
+    Ws2812Color color = led->color();
+    if (!readRequestedColor(query, color)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "RGB 参数必须为 0 至 255 的整数");
+        return ESP_FAIL;
+    }
+    led->setColor(color);
+
     if (strcmp(mode, "off") == 0) {
         led->turnOff();
     } else if (strcmp(mode, "on") == 0) {
-        led->turnOn({16, 16, 16});
+        led->turnOn(color);
     } else if (strcmp(mode, "blink") == 0) {
-        led->startBlinking({0, 16, 32}, 500, 500);
+        led->startBlinking(color, 500, 500);
     } else {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "不支持的 mode 参数");
         return ESP_FAIL;

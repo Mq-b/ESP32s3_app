@@ -61,6 +61,19 @@ Ws2812Mode Ws2812Controller::mode() const {
     return mode_;
 }
 
+void Ws2812Controller::setColor(Ws2812Color color) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    color_ = color;
+    if (mode_ != Ws2812Mode::Off) {
+        applyColorLocked(color_);
+    }
+}
+
+Ws2812Color Ws2812Controller::color() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return color_;
+}
+
 void Ws2812Controller::taskEntry(void *arg) {
     static_cast<Ws2812Controller *>(arg)->taskLoop();
 }
