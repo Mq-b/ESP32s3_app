@@ -1,4 +1,8 @@
 CompileFlags:
   CompilationDatabase: build/esp32s3
-  Remove: [-std=*, -fno-shrink-wrap, -fstrict-volatile-bitfields, -fno-tree-switch-conversion]
-  Add: [-std=c++23]
+  Remove:
+    - -fno-shrink-wrap
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+    - -fzero-init-padding-bits=all
+    - -fno-malloc-dce

@@ -184,6 +184,8 @@ idf-driver\idf-driver-esp32-usb-jtag-2021-07-15\usb_jtag_debug_unit.inf
 
 ## clangd
 
-项目的 `.clangd` 使用 `build/esp32s3/compile_commands.json` 提供 ESP-IDF 的真实头文件和宏配置，并将 clangd 的语言解析标准设置为 C++23。先执行一次上述 CMake 构建以生成编译数据库。此设置只影响 clangd 的诊断和补全，实际固件仍按 C++20 编译；不要仅凭 clangd 通过就使用 C++23 特性。
+项目的 `.clangd` 使用 `build/esp32s3/compile_commands.json` 提供 ESP-IDF 的真实头文件、宏和语言标准，并过滤 clangd 不支持的 GCC 专用参数。不要统一追加 `-std=c++23`，否则 C 文件会被错误地使用 C++ 标准解析。先执行一次上述 CMake 构建以生成编译数据库。
 
 > clangd 红色误报处理：`.vscode/settings.json` 为 clangd 配置了 ESP32-S3 的交叉编译器 `--query-driver`，让 clangd 使用 Xtensa 工具链的 C++ 标准库头文件，而不是 Windows 主机头文件。该文件包含本机路径，已被 `.gitignore` 忽略。修改后请执行 **命令面板 → clangd: Restart language server**。
+
+> clangd 提示标准头文件（例如 float.h）不存在时，检查资源目录。某些 ESP-IDF 安装将 clangd 与内置头文件分开安装，需要在本机 VS Code 的 clangd.arguments 中添加 --resource-dir 参数，指向 esp-clang-libs 下包含 include/float.h 的 lib/clang/<版本> 目录，而不是 include 目录本身。修改启动参数后执行 clangd: Restart language server。
