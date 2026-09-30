@@ -2,6 +2,7 @@
 #include "network_scanner.h"
 #include "web_server.h"
 #include "wifi_manager.h"
+#include "ws2812_controller.h"
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -27,7 +28,8 @@ extern "C" void app_main(void) {
     wifi->start();
 
     // HTTP 服务（含设备扫描 API），扫描由页面触发
-    static auto server = std::make_unique<WebServer>(NetworkScanner::instance());
+    static auto led = std::make_unique<Ws2812Controller>(48);
+    static auto server = std::make_unique<WebServer>(NetworkScanner::instance(), *led);
     server->start(config->staticIp);
 
     while (true) {
