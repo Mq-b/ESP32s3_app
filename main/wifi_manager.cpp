@@ -1,6 +1,5 @@
-#include "wifi_manager.hpp"
+#include "wifi_manager.h"
 
-#include "app_config.hpp"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -12,10 +11,12 @@
 
 static const char *TAG = "WIFI";
 
+namespace {
+
 /**
  * @brief WiFi 事件处理：启动即连接，断线自动重连
  */
-static void onWifiEvent(void *arg, esp_event_base_t base, int32_t id, void *data) {
+void onWifiEvent(void *arg, esp_event_base_t base, int32_t id, void *data) {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
@@ -31,7 +32,7 @@ static void onWifiEvent(void *arg, esp_event_base_t base, int32_t id, void *data
 /**
  * @brief 关闭 DHCP 并应用固定 IP
  */
-static void applyStaticIp(esp_netif_t *netif, const AppConfig &config) {
+void applyStaticIp(esp_netif_t *netif, const AppConfig &config) {
     ESP_ERROR_CHECK(esp_netif_dhcpc_stop(netif));
 
     esp_netif_ip_info_t ipInfo{};
@@ -43,7 +44,11 @@ static void applyStaticIp(esp_netif_t *netif, const AppConfig &config) {
     ESP_LOGI(TAG, "固定 IP: %s 网关: %s", config.staticIp.c_str(), config.gateway.c_str());
 }
 
-void wifiStart(const AppConfig &config) {
+}  // namespace
+
+void WiFiManager::start() {
+    const AppConfig &config = config_;
+
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 

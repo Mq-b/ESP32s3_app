@@ -1,4 +1,4 @@
-#include "app_config.hpp"
+#include "app_config.h"
 
 #include "esp_log.h"
 #include "esp_spiffs.h"
@@ -8,12 +8,14 @@
 
 static const char *TAG = "CONFIG";
 
-static constexpr const char *CONFIG_PATH = "/spiffs/wifi.json";
+namespace {
+
+constexpr const char *CONFIG_PATH = "/spiffs/wifi.json";
 
 /**
  * @brief 挂载 SPIFFS 文件系统
  */
-static void mountSpiffs() {
+void mountSpiffs() {
     esp_vfs_spiffs_conf_t conf = {
         .base_path = "/spiffs",
         .partition_label = "storage",
@@ -26,7 +28,7 @@ static void mountSpiffs() {
 /**
  * @brief 读取整个文件内容
  */
-static std::string readFile(const char *path) {
+std::string readFile(const char *path) {
     FILE *f = std::fopen(path, "r");
     if (!f) {
         return {};
@@ -45,23 +47,20 @@ static std::string readFile(const char *path) {
  * @brief 极简 JSON 取值：适用于扁平对象中的字符串字段
  *        例: {"ssid": "bigtop", ...}，支持空白与 \" \\ \/ \n \t 转义
  */
-static std::string jsonString(const std::string &json, const std::string &key,
-                              const std::string &fallback) {
-    // 定位 "key"
+std::string jsonString(const std::string &json, const std::string &key,
+                       const std::string &fallback) {
     size_t pos = json.find('"' + key + '"');
     if (pos == std::string::npos) {
         ESP_LOGW(TAG, "配置缺少字段 \"%s\"，使用默认值 \"%s\"", key.c_str(), fallback.c_str());
         return fallback;
     }
 
-    // 跳过冒号与空白
     pos = json.find(':', pos);
     if (pos == std::string::npos) return fallback;
     pos = json.find_first_not_of(" \t\r\n", pos + 1);
     if (pos == std::string::npos || json[pos] != '"') return fallback;
     ++pos;
 
-    // 提取字符串值，处理转义
     std::string value;
     while (pos < json.size() && json[pos] != '"') {
         if (json[pos] == '\\' && pos + 1 < json.size()) {
@@ -79,7 +78,9 @@ static std::string jsonString(const std::string &json, const std::string &key,
     return value.empty() ? fallback : value;
 }
 
-AppConfig loadAppConfig() {
+}  // namespace
+
+AppConfig AppConfig::load() {
     mountSpiffs();
 
     AppConfig config;

@@ -1,4 +1,4 @@
-#include "web_server.hpp"
+#include "web_server.h"
 
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -7,65 +7,155 @@
 
 static const char *TAG = "HTTP";
 
-// 页面模板，运行时把 IP 拼进去
-static std::string buildIndexHtml(const std::string &ip) {
-    return std::string(R"HTML(
-<!DOCTYPE html>
+namespace {
+
+/**
+ * @brief 首页：深色卡片风格，表格展示扫描结果，每 2 秒轮询；
+ *        「持续扫描」开启时，一轮结束自动发起下一轮。
+ */
+const char INDEX_HTML[] = R"HTML(<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP32-S3</title>
+<title>ESP32-S3 · 内网设备</title>
 <style>
-  body { font-family: system-ui, sans-serif; display: flex; justify-content: center;
-         align-items: center; min-height: 100vh; margin: 0; background: #0f172a; color: #e2e8f0; }
-  .card { background: #1e293b; border-radius: 16px; padding: 40px 56px; text-align: center;
-          box-shadow: 0 10px 40px rgba(0,0,0,.4); }
-  h1 { margin: 0 0 8px; color: #38bdf8; }
-  p { margin: 4px 0; color: #94a3b8; }
-  .ip { font-size: 1.4em; color: #4ade80; font-weight: 600; }
+* { box-sizing: border-box; margin: 0; }
+body { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+       background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 36px 20px; }
+.wrap { max-width: 820px; margin: 0 auto; }
+h1 { font-size: 20px; font-weight: 600; color: #38bdf8; }
+.sub { font-size: 12px; color: #64748b; margin: 4px 0 22px; }
+.bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+       font-size: 13px; color: #94a3b8; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80;
+       animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.card { background: #1e293b; border: 1px solid #2c3a52; border-radius: 14px; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 11px 16px; font-size: 11px; font-weight: 500; color: #64748b;
+     text-transform: uppercase; letter-spacing: 1px; background: #182238; }
+td { padding: 11px 16px; border-top: 1px solid #26334a; }
+tbody tr:hover { background: #243149; }
+.mono { font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 13px; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px;
+         white-space: nowrap; }
+.win { background: #164e63; color: #67e8f9; }
+.nix { background: #14532d; color: #86efac; }
+.net { background: #713f12; color: #fde047; }
+.esp { background: #3730a3; color: #c7d2fe; }
+.unk { background: #3f3f46; color: #d4d4d8; }
+.dim { color: #64748b; font-size: 12px; }
+.empty { padding: 48px; text-align: center; color: #64748b; }
 </style>
 </head>
 <body>
-  <div class="card">
-    <h1>ESP32-S3 HTTP 服务</h1>
-    <p>设备已连接公司 WiFi</p>
-    <p>固定 IP 地址</p>
-    <p class="ip">)HTML") + ip + R"HTML(</p>
-    <p>Powered by ESP-IDF + C++</p>
+<div class="wrap">
+  <h1>内网设备</h1>
+  <p class="sub" id="sub">ESP32-S3 · 持续扫描 /24 网段</p>
+  <div class="bar">
+    <span class="dot"></span>
+    <span id="status">准备中…</span>
+    <label style="margin-left:auto"><input type="checkbox" id="auto" checked>持续扫描</label>
   </div>
-</body>
-</html>
-)HTML";
+  <div class="card">
+    <table>
+      <thead><tr><th>IP 地址</th><th>MAC 地址</th><th>系统</th><th>延迟</th><th>来源</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty">正在扫描网段…</div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const badge = os => {
+  if (os.startsWith('Windows')) return ['win', 'Windows'];
+  if (os.startsWith('Linux')) return ['nix', 'Linux / macOS'];
+  if (os.startsWith('Network')) return ['net', '网络设备'];
+  if (os.startsWith('ESP32')) return ['esp', 'ESP32-S3'];
+  return ['unk', os || '未知'];
+};
+function row(v) {
+  const [cls, label] = badge(v.os);
+  return '<tr><td class="mono">' + v.ip + '</td><td class="mono">' + v.mac + '</td>' +
+    '<td><span class="badge ' + cls + '" title="TTL ' + v.ttl + '">' + label + '</span></td>' +
+    '<td class="mono">' + (v.ping ? v.rtt_ms + ' ms' : '—') + '</td>' +
+    '<td class="dim">' + (v.ping ? 'ICMP' : 'ARP') + '</td></tr>';
 }
+async function refresh() {
+  try {
+    const j = await (await fetch('/api/devices', { cache: 'no-store' })).json();
+    $('rows').innerHTML = j.devices.map(row).join('');
+    $('empty').style.display = j.count ? 'none' : 'block';
+    $('status').textContent = j.scanning ? '扫描中…' : '空闲';
+    $('sub').textContent = 'ESP32-S3 · ' + location.hostname + ' · ' + j.count + ' 台设备';
+    if (!j.scanning && $('auto').checked) fetch('/api/scan', { method: 'POST' }).catch(() => {});
+  } catch (e) { $('status').textContent = '连接失败'; }
+}
+fetch('/api/scan', { method: 'POST' }).catch(() => {});
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>)HTML";
 
-static std::string g_indexHtml;
-
-/**
- * @brief GET / 返回首页
- */
-static esp_err_t indexHandler(httpd_req_t *req) {
+esp_err_t indexHandler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
-    httpd_resp_send(req, g_indexHtml.c_str(), g_indexHtml.size());
+    httpd_resp_send(req, INDEX_HTML, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
-void startWebServer(const std::string &ip) {
-    g_indexHtml = buildIndexHtml(ip);
+esp_err_t devicesHandler(httpd_req_t *req) {
+    auto *scanner = static_cast<NetworkScanner *>(req->user_ctx);
+    std::string json = scanner->devicesJson();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_send(req, json.c_str(), json.size());
+    return ESP_OK;
+}
 
+esp_err_t scanHandler(httpd_req_t *req) {
+    auto *scanner = static_cast<NetworkScanner *>(req->user_ctx);
+    scanner->startAsync();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"ok\":true}", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+}  // namespace
+
+void WebServer::start(const std::string &deviceIp) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 80;
 
     httpd_handle_t server = nullptr;
     ESP_ERROR_CHECK(httpd_start(&server, &config));
 
-    httpd_uri_t indexUri = {
+    auto *scanner = &scanner_;
+
+    const httpd_uri_t indexUri = {
         .uri = "/",
         .method = HTTP_GET,
         .handler = indexHandler,
         .user_ctx = nullptr,
     };
-    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &indexUri));
+    const httpd_uri_t devicesUri = {
+        .uri = "/api/devices",
+        .method = HTTP_GET,
+        .handler = devicesHandler,
+        .user_ctx = scanner,
+    };
+    const httpd_uri_t scanUri = {
+        .uri = "/api/scan",
+        .method = HTTP_POST,
+        .handler = scanHandler,
+        .user_ctx = scanner,
+    };
 
-    ESP_LOGI(TAG, "HTTP 服务已启动: http://%s/", ip.c_str());
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &indexUri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &devicesUri));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &scanUri));
+
+    ESP_LOGI(TAG, "HTTP 服务已启动: http://%s/", deviceIp.c_str());
 }
