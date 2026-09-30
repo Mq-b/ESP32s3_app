@@ -68,14 +68,16 @@ const badge = os => { if (os.startsWith('Windows')) return ['win', 'Windows']; i
 function row(v) { const [cls, label] = badge(v.os); return '<tr><td class="mono">' + v.ip + '</td><td class="mono">' + v.mac + '</td><td><span class="badge ' + cls + '" title="TTL ' + v.ttl + '">' + label + '</span></td><td class="mono">' + (v.ping ? v.rtt_ms + ' ms' : '—') + '</td><td class="dim">' + (v.ping ? 'ICMP' : 'ARP') + '</td></tr>'; }
 async function refresh() { try { const j = await (await fetch('/api/devices', { cache: 'no-store' })).json(); $('rows').innerHTML = j.devices.map(row).join(''); $('empty').style.display = j.count ? 'none' : 'block'; $('status').textContent = j.scanning ? '扫描中…' : '空闲'; $('sub').textContent = 'ESP32-S3 · ' + location.hostname + ' · ' + j.count + ' 台设备'; if (!j.scanning && $('auto').checked) fetch('/api/scan', { method: 'POST' }).catch(() => {}); } catch (e) { $('status').textContent = '连接失败'; } }
 let ledMode = 'off';
+let colorDirty = false;
+let ledRequestSerial = 0;
 function hexColor(r, g, b) { return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''); }
 function selectedRgb() { const hex = $('ledColor').value; return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]; }
 function showColor(r, g, b) { $('ledColor').value = hexColor(r, g, b); $('rgbValue').textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')'; }
-async function setLed(mode) { const [r, g, b] = selectedRgb(); await fetch('/api/led?mode=' + mode + '&r=' + r + '&g=' + g + '&b=' + b, { method: 'POST' }); await refreshLed(); }
-async function refreshLed() { try { const j = await (await fetch('/api/led', { cache: 'no-store' })).json(); const labels = { off: '关闭', on: '常亮', blink: '闪烁' }; ledMode = j.mode; $('ledStatus').textContent = labels[j.mode] || '未知'; showColor(j.r, j.g, j.b); document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === j.mode)); } catch (e) { $('ledStatus').textContent = '连接失败'; } }
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setLed(b.dataset.mode).catch(() => refreshLed())));
-$('ledColor').addEventListener('input', () => { const [r, g, b] = selectedRgb(); $('rgbValue').textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')'; });
-$('ledColor').addEventListener('change', () => setLed(ledMode).catch(() => refreshLed()));
+async function setLed(mode) { const [r, g, b] = selectedRgb(); colorDirty = true; ++ledRequestSerial; const response = await fetch('/api/led?mode=' + mode + '&r=' + r + '&g=' + g + '&b=' + b, { method: 'POST' }); if (!response.ok) throw new Error('LED 控制请求失败'); await refreshLed(true); }
+async function refreshLed(syncColor = false) { if (colorDirty && !syncColor) return; const serial = ++ledRequestSerial; try { const j = await (await fetch('/api/led', { cache: 'no-store' })).json(); if (serial !== ledRequestSerial) return; const labels = { off: '关闭', on: '常亮', blink: '闪烁' }; ledMode = j.mode; $('ledStatus').textContent = labels[j.mode] || '未知'; if (!colorDirty || syncColor) { showColor(j.r, j.g, j.b); colorDirty = false; } document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === j.mode)); } catch (e) { $('ledStatus').textContent = '连接失败'; } }
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setLed(b.dataset.mode).catch(() => refreshLed(true))));
+$('ledColor').addEventListener('input', () => { colorDirty = true; ++ledRequestSerial; const [r, g, b] = selectedRgb(); $('rgbValue').textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')'; });
+$('ledColor').addEventListener('change', () => setLed(ledMode).catch(() => refreshLed(true)));
 fetch('/api/scan', { method: 'POST' }).catch(() => {}); refresh(); refreshLed(); setInterval(refresh, 2000); setInterval(refreshLed, 2000);
 </script>
 </body>
