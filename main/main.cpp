@@ -31,8 +31,4 @@ extern "C" void app_main(void) {
     static auto led = std::make_unique<Ws2812Controller>(48);
     static auto server = std::make_unique<WebServer>(NetworkScanner::instance(), *led);
     server->start(config->staticIp);
-
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(60000));
-    }
 }
