@@ -1,5 +1,6 @@
 CompileFlags:
   CompilationDatabase: build/esp32s3
+  BuiltinHeaders: QueryDriver
   Remove:
     - -fno-shrink-wrap
     - -fstrict-volatile-bitfields

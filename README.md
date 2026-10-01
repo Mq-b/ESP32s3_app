@@ -188,4 +188,5 @@ idf-driver\idf-driver-esp32-usb-jtag-2021-07-15\usb_jtag_debug_unit.inf
 
 > clangd 红色误报处理：`.vscode/settings.json` 为 clangd 配置了 ESP32-S3 的交叉编译器 `--query-driver`，让 clangd 使用 Xtensa 工具链的 C++ 标准库头文件，而不是 Windows 主机头文件。该文件包含本机路径，已被 `.gitignore` 忽略。修改后请执行 **命令面板 → clangd: Restart language server**。
 
-> clangd 提示标准头文件（例如 float.h）不存在时，检查资源目录。某些 ESP-IDF 安装将 clangd 与内置头文件分开安装，需要在本机 VS Code 的 clangd.arguments 中添加 --resource-dir 参数，指向 esp-clang-libs 下包含 include/float.h 的 lib/clang/<版本> 目录，而不是 include 目录本身。修改启动参数后执行 clangd: Restart language server。
+
+> 标准头文件解析：项目已配置 `CompileFlags.BuiltinHeaders: QueryDriver`（需要支持该选项的 clangd）。配合 `--query-driver`，直接使用交叉编译器的内置头文件搜索路径；本项目已验证可在不设置个人绝对路径 `--resource-dir` 的情况下解析 `float.h`。这也避免本机 VS Code 启动参数丢失后再次出现同类误报。修改 `.clangd` 后，重启语言服务器并确认编辑器中的诊断；若仍有红线，应进一步检查具体文件及其编译命令。
