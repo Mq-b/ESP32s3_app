@@ -1,4 +1,5 @@
 #include "app_config.h"
+#include "ble_config_service.h"
 #include "network_scanner.h"
 #include "web_server.h"
 #include "wifi_manager.h"
@@ -24,6 +25,10 @@ extern "C" void app_main(void) {
     }
 
     static auto config = std::make_unique<AppConfig>(AppConfig::load());
+    err = BleConfigService::start(*config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "蓝牙配网服务启动失败: %s", esp_err_to_name(err));
+    }
     static auto wifi = std::make_unique<WiFiManager>(*config);
     wifi->start();
 

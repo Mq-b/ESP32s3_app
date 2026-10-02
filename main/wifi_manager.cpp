@@ -63,12 +63,17 @@ void WiFiManager::start() {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
                                                         onWifiEvent, nullptr, nullptr));
 
+    if (config.ssid.empty()) {
+        ESP_LOGW(TAG, "尚未配置 WiFi，保留蓝牙配网服务等待设置");
+        return;
+    }
+
     wifi_config_t wifiCfg{};
     std::strncpy(reinterpret_cast<char *>(wifiCfg.sta.ssid), config.ssid.c_str(),
-                 sizeof(wifiCfg.sta.ssid) - 1);
+                 sizeof(wifiCfg.sta.ssid));
     std::strncpy(reinterpret_cast<char *>(wifiCfg.sta.password), config.password.c_str(),
-                 sizeof(wifiCfg.sta.password) - 1);
-    wifiCfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+                 sizeof(wifiCfg.sta.password));
+    wifiCfg.sta.threshold.authmode = config.password.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifiCfg));

@@ -11,3 +11,5 @@
 /.cache/
 /data/wifi.json
 .workbuddy
+__pycache__/
+*.pyc
