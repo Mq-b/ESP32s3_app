@@ -1,12 +1,13 @@
 #pragma once
 
 #include "network_scanner.h"
+#include "system_monitor.h"
 #include "ws2812_controller.h"
 
 #include <string>
 
 /**
- * @brief HTTP 服务：首页、内网设备扫描以及板载 WS2812 控制 API。
+ * @brief HTTP 服务：首页、内网设备扫描、板载 WS2812 控制及系统资源监控 API。
  */
 class WebServer {
 public:
@@ -24,6 +25,7 @@ public:
     void start(const std::string &deviceIp);
 
 private:
+    SystemMonitor monitor_;
     NetworkScanner &scanner_;
     Ws2812Controller &led_;
 };
