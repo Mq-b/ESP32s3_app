@@ -1,238 +1,44 @@
-# ESP32-S3 内网 Web 服务 Demo
+# ESP32-S3 · Web 后端服务与网段设备扫描
 
-ESP-IDF v6.1，目标 ESP32-S3。设备以 STA 模式连接指定 WiFi，使用**固定 IP**，并在 80 端口运行一个 HTTP 服务，浏览器访问 `http://<固定IP>/` 即可看到设备首页。WiFi 凭据初始通过 JSON 配置文件加载，不进 Git；可通过 BLE 配网修改，修改后的配置优先从 NVS 加载并同步到 wifi.json。
+基于 **ESP-IDF v6.1 / C++**，在 **ESP32-S3 开发板上运行 Web 后端服务**，同时提供网页界面和 HTTP API。设备连接 WiFi 后，浏览器访问设备 IP，即可**扫描并展示当前网段中的设备**，以及控制板载 RGB LED。
 
-## 功能
+另提供 [**Python 蓝牙 GUI 工具**](./tools/configure_wifi.pyw)，用于读取和修改 ESP32 WiFi 配置，无需为更换网络重新烧录。
 
-- WiFi STA 连接，固定 IP（默认 `192.168.0.10`），断线自动重连
-- HTTP 服务（`esp_http_server`，80 端口），`GET /` 返回设备首页
-- 配置外置：`data/wifi.json`（SPIFFS 文件系统），与代码分离、已 gitignore
+## 能做什么
 
-## 项目结构
+- **Web 后端服务**：开发板提供 HTTP 服务、网页及设备扫描／LED 控制 API，无需另外部署服务器。
+- **网段设备扫描与展示**：由开发板扫描当前 IP 所在的 `/24` 网段，在网页表格展示发现的设备 IP、MAC、响应延迟、发现来源和系统类型推测，支持持续扫描。
+- **网页控灯**：选择 RGB 颜色，切换板载 WS2812 的关闭、常亮和闪烁模式。
+- **蓝牙配网**：支持被蓝牙扫描、连接、获取和修改 WiFi 配置，保存后重启生效；原 WiFi 不可用时也能配网。
+- **配置持久化**：NVS 优先加载并同步 `wifi.json`，普通烧录不擦除 NVS 时保留蓝牙配置。
 
-```
-main/
-  main.cpp          入口：初始化 NVS → 加载配置 → 连 WiFi → 起 HTTP 服务
-  app_config.*      挂载 SPIFFS，解析 /spiffs/wifi.json（极简 JSON 解析，无外部依赖）
-  wifi_manager.*    STA 连接、固定 IP、事件处理与自动重连
-  web_server.*      HTTP 服务与首页 HTML
-  ble_config_service.* BLE 广播发现、认证配对与网络配置保存
-data/
-  wifi.json         真实凭据（已 gitignore，需自行创建）
-  wifi.example.json 配置模板（复制为 wifi.json 并填写）
-partitions.csv      分区表：factory 2MB + storage(SPIFFS) 1MB
-```
+## 效果展示
 
-## 首次使用：创建配置
+### Web 页面：当前网段设备展示与 RGB 控灯
 
-复制模板并填写自己的网络参数：
+![浏览器页面：扫描内网设备并选择板载 LED 颜色](images/web-led-control.png)
 
-```powershell
-Copy-Item data/wifi.example.json data/wifi.json
-```
+### Python GUI：蓝牙扫描与 WiFi 配置
 
-```json
-{
-  "ssid": "your-ssid",
-  "password": "your-password",
-  "static_ip": "192.168.0.10",
-  "gateway": "192.168.0.1",
-  "netmask": "255.255.255.0"
-}
-```
+![Python 蓝牙配网 GUI：连接设备、获取和修改 WiFi 配置](images/ble-wifi-gui.png)
 
-编译时 `data/` 目录会被打包为 SPIFFS 镜像 `storage.bin`，随烧录一并写入 flash（见 `main/CMakeLists.txt` 的 `spiffs_create_partition_image`）。
+### 开发板实拍：板载 RGB LED 点亮
 
-## 构建
+![ESP32-S3 开发板运行实拍：板载 RGB LED 点亮](images/board-led-on.jpg)
 
-直接使用 CMake（推荐）：
+## 怎么用
 
-```powershell
-cmake --preset esp32s3
-cmake --build --preset esp32s3
-```
+1. 参照[首次运行指南](docs/getting-started.md)，准备配置并烧录固件。
+2. 浏览器访问 `http://<设备固定IP>/`，即可查看当前网段的扫描结果、控制 LED。
+3. 安装 Python 蓝牙依赖后，双击 `tools/configure_wifi.pyw` 修改网络配置，详见[蓝牙配网指南](docs/ble-configuration.md)。
 
-固件输出到 `build/esp32s3/esp32s3_app.bin`，SPIFFS 镜像为 `build/esp32s3/storage.bin`。
+> 蓝牙配对码固定为 **123456**，仅适合可信开发环境；GUI 可以读取 WiFi 密码，请妥善保管配置。
 
-或在已初始化环境的 ESP-IDF PowerShell 终端中执行（注意指定构建目录为 preset 的 `build/esp32s3`）：
+## 详细文档
 
-```powershell
-$env:PROCESSOR_ARCHITECTURE = 'AMD64'
-idf.py -B build/esp32s3 build
-```
-
-> 注意：Git Bash / MSYS 环境下 IDF 的 Python 依赖检查会报 `MSys/Mingw is not supported`，请用 PowerShell。
-
-## 烧录与运行
-
-```powershell
-idf.py -B build/esp32s3 flash monitor
-```
-
-烧录包含 bootloader、分区表、`storage.bin`（wifi.json）、app 四部分。ESP32-S3 原生 USB 烧录后若停在 `waiting for download`，按一下 RST 复位即可。
-
-启动日志依次出现 `配置加载完成` → `正在连接 WiFi` → `HTTP 服务已启动` 后，浏览器访问：
-
-```
-http://192.168.0.10/
-```
-
-## flash 分区布局（8MB）
-
-![flash layout](./images/flash_layout.svg)
-
-| 地址 | 分区 | 大小 | 用途 |
-|---|---|---|---|
-| 0x0 | bootloader | 32KB | 上电第一段代码 |
-| 0x8000 | 分区表 | 4KB | partitions.csv 编译产物 |
-| 0x9000 | nvs | 24KB | WiFi 校准等键值存储 |
-| 0xF000 | phy_init | 4KB | 射频校准数据 |
-| 0x10000 | factory | 2MB | 应用固件 |
-| 0x210000 | storage | 1MB | SPIFFS，存放 wifi.json |
-| 0x310000 起 | 未分配 | ~4.9MB | 预留扩展（OTA / 更多存储） |
-
-## 硬件资源
-
-- Flash（外置）：8MB（以 `esptool.py flash_id` 实测为准）
-- SRAM（内置）：512KB 运行内存
-- PSRAM：视模组型号（N8R2/N8R8 等），当前未启用
-
-## VS Code ESP-IDF 插件
-
-用 VS Code 打开本项目目录（不要打开其上级目录）。本机 `.vscode/settings.json` 指向已安装的 IDF 配置及 `esp32s3` CMake Preset，属于个人配置，已忽略。
-
-## ESP32-S3 USB-JTAG 断点调试
-
-已完成配置并验证 VS Code 断点调试正常。
-
-### 连接与配置
-
-- 连接开发板的 ESP32-S3 原生 USB / USB&OTG Type-C 接口，不是 CH343P USB 转串口接口。
-- 用 VS Code 打开项目根目录，构建目录为 `build/esp32s3`。
-- 当前 `sdkconfig` 已启用 `CONFIG_COMPILER_OPTIMIZATION_DEBUG=y`。
-
-在 `.vscode/settings.json` 中保留原有配置，增加：
-
-```json
-"idf.openOcdConfigs": [
-  "board/esp32s3-builtin.cfg"
-]
-```
-
-创建 `.vscode/launch.json`：
-
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "ESP32-S3 断点调试",
-      "type": "gdbtarget",
-      "request": "attach",
-      "program": "${workspaceFolder}/build/esp32s3/esp32s3_app.elf",
-      "gdb": "${command:espIdf.getToolchainGdb}",
-      "initialBreakpoint": "app_main"
-    }
-  ]
-}
-```
-
-### 日常调试
-
-1. 修改代码后先编译、烧录，确保板上固件与本地 ELF 一致。
-2. 命令面板执行 `ESP-IDF: OpenOCD Manager`，启动 OpenOCD。
-3. 在可执行语句左侧点击设置断点，选择“ESP32-S3 断点调试”，按 F5。
-4. 在 `app_main` 停住后，按 F5 继续；F10 单步跳过，F11 进入函数，Shift+F11 跳出函数。
-5. 停住时在“变量”“监视”和“调用堆栈”中查看运行状态；Shift+F5 结束调试。
-
-### 常见问题
-
-**1. OpenOCD 报 `libusb_open() failed with LIBUSB_ERROR_NOT_FOUND`**
-
-本机能识别 `USB JTAG/serial debug unit`，但官方驱动安装程序提示“Already installed”后，设备仍绑定原来的 `winusb.inf`，OpenOCD 无法访问。
-
-处理：设备管理器 → `USB JTAG/serial debug unit` → 更新驱动 → 浏览我的电脑 → 让我选取 → 从磁盘安装，选择 ESP-IDF 安装目录下的官方驱动：
-
-```text
-idf-driver\idf-driver-esp32-usb-jtag-2021-07-15\usb_jtag_debug_unit.inf
-```
-
-不要修改 USB 转串口设备的驱动。驱动目录以本机 ESP-IDF 安装位置为准。
-
-**2. 提示 OpenOCD 未运行**
-
-先通过 `ESP-IDF: OpenOCD Manager` 启动服务；如果启动失败，先排查 OpenOCD 输出，不要反复启动 GDB。
-
-**3. 找不到 ROM ELF 文件**
-
-错误路径为 `esp-rom-elfs/20241011esp32s3_rev0_rom.elf`，原因是 `ESP_ROM_ELF_DIR` 末尾缺少 `/`，生成调试脚本时目录与文件名直接拼接。
-
-以下为路径模板，需将占位符替换为实际工具目录和版本目录，末尾保留 `/`：
-
-```json
-"ESP_ROM_ELF_DIR": "<IDF_TOOLS_PATH>/esp-rom-elfs/<版本目录>/"
-```
-
-检查 `CMakePresets.json` 中的环境变量；若 `.vscode/settings.json` 的 `idf.customExtraVars` 也配置了该变量，同样保留末尾 `/`，避免后续重新生成时再次出错。
-
-重新配置后，应确认生成的 `build/esp32s3/gdbinit/symbols` 中 ROM ELF 路径正确，路径结构如下：
-
-```text
-<IDF_TOOLS_PATH>/esp-rom-elfs/<版本目录>/esp32s3_rev0_rom.elf
-```
-
-仅修正调试符号路径不需要重新烧录；修改固件代码则需要重新编译、烧录。
-
-## clangd
-
-项目的 `.clangd` 使用 `build/esp32s3/compile_commands.json` 提供 ESP-IDF 的真实头文件、宏和语言标准，并过滤 clangd 不支持的 GCC 专用参数。不要统一追加 `-std=c++23`，否则 C 文件会被错误地使用 C++ 标准解析。先执行一次上述 CMake 构建以生成编译数据库。
-
-> clangd 红色误报处理：`.vscode/settings.json` 为 clangd 配置了 ESP32-S3 的交叉编译器 `--query-driver`，让 clangd 使用 Xtensa 工具链的 C++ 标准库头文件，而不是 Windows 主机头文件。该文件包含本机路径，已被 `.gitignore` 忽略。修改后请执行 **命令面板 → clangd: Restart language server**。
-
-
-> 标准头文件解析：项目已配置 `CompileFlags.BuiltinHeaders: QueryDriver`（需要支持该选项的 clangd）。配合 `--query-driver`，直接使用交叉编译器的内置头文件搜索路径；本项目已验证可在不设置个人绝对路径 `--resource-dir` 的情况下解析 `float.h`。这也避免本机 VS Code 启动参数丢失后再次出现同类误报。修改 `.clangd` 后，重启语言服务器并确认编辑器中的诊断；若仍有红线，应进一步检查具体文件及其编译命令。
-
-## BLE 图形配网（修改 wifi.json）
-
-设备持续广播 `ESP32S3-Config-XXXXXX`，配对码统一固定为 **123456**，不再读取以前 NVS 中的随机配对码。广播不包含网络凭据，连接后的配置读写仍要求认证加密。
-
-### 启动 GUI
-
-安装 `tools/requirements-ble.txt` 中的依赖后，双击唯一运行脚本 `tools/configure_wifi.pyw` 即可显示图形窗口，没有命令行配置交互。GUI 和 BLE 协议逻辑均包含在该文件中，不依赖其他本地 Python 模块。
-
-操作顺序：
-
-1. 点击 **扫描设备**，从下拉列表选择设备。
-2. 点击 **连接 / 配对**，Windows 通过支持 PIN 的 WinRT 配对流程使用固定码 `123456`，并验证受保护特征可读后才显示连接成功。
-3. 点击 **获取配置**，读取设备已保存的 SSID、密码、固定 IP、网关和子网掩码。密码默认隐藏，可勾选显示。
-4. 编辑配置后点击 **保存配置**。设备明确返回 `saved` 后，GUI 才允许点击 **重启生效**。
-5. 点击 **重启生效**并确认，设备约 1.5 秒后重启。检查新 IP 和网页是否可访问。
-
-保存与重启为两个独立操作。获取的是已保存配置，不一定是当前正在运行的 WiFi 配置。传输中断或保存失败时不会自动重启。所有扫描、连接、读写在后台异步执行，窗口不会阻塞，操作期间禁止重复请求。
-
-修改配置不需要烧录。不涉及 OTA、分区表或 HTML。
-
-### GATT 协议
-
-| 对象 | UUID | 操作 |
-|---|---|---|
-| 配网服务 | `7d9a0001-6f41-4b5b-9c82-56e0438ab100` | 广播发现 |
-| 配置数据 | `7d9a0002-6f41-4b5b-9c82-56e0438ab100` | 认证加密读写，回读含密码 |
-| 控制/状态 | `7d9a0003-6f41-4b5b-9c82-56e0438ab100` | 认证加密读写 |
-
-- 写配置：控制特征写 `reset`，数据特征按 UTF-8 字节分包写完整 JSON（客户端每包 20 字节、Write with response），控制特征写 `save` 后读取状态，`saved` 表示持久保存成功。
-- 读配置：控制特征写 `read:<字节偏移>`，读取数据特征最多返回 128 字节，从偏移零开始累计，末包少于 128 字节结束。UTF-8 在完整拼接后解码，避免分包截断汉字。
-- 重启：当前连接保存成功后控制特征写 `reboot`。断开重连后必须重新保存才能请求重启。
-- 总 JSON 长度不超过 1024 字节；SSID 为 1 至 32 字节；密码为空、8 至 63 字节或 64 位十六进制 PSK；固定 IP、连续子网掩码及同网段网关必须有效。
-
-### 持久保存与故障处理
-
-设备先提交 NVS，再同步 `/spiffs/wifi.json`；启动优先使用 NVS，文件同步中断时可用副本恢复。**重刷 `storage.bin` 不会覆盖 NVS 配置**。填错网络后仍可通过 BLE 重新修改。
-
-已建立的系统绑定不会因配对码改动而自动清除。若遇到旧绑定或 GATT 缓存不兼容，请先在 Windows 删除旧设备配对记录；新版设备端支持对端请求重新配对时定向清理该对端旧绑定；旧版固件需要升级。不要随意擦除整个 NVS，否则会丢失网络配置。
-
-当前固定 IP 模式不支持 DHCP、WEP 或企业级 WiFi 认证。上板验收应覆盖扫描、配对、获取包含汉字的配置、保存后重启、错误配置拒绝、断线重连和 WiFi/BLE 共存。
-
-离线协议测试：`python -m unittest discover -s tests -v`。
-
-认证故障说明：Windows 已配对或 BLE 已连接不等于当前链路已经通过认证。客户端不再使用仅支持 ConfirmOnly 的自动配对路径，不允许降低到无认证连接。若出现 `Insufficient Authentication`，先在 Windows 删除旧设备配对记录，再用新版 GUI 重新连接。设备启动日志中的“蓝牙安全状态”用于确认加密和认证均为 1；配置和密码不记录到日志。
+| 文档 | 内容 |
+|---|---|
+| [首次运行](docs/getting-started.md) | 创建配置、构建、烧录与访问 |
+| [蓝牙配网](docs/ble-configuration.md) | GUI 操作、认证排障、GATT 协议与配置保留规则 |
+| [硬件与分区](docs/hardware-and-partitions.md) | 硬件资源、Flash 布局与应用占用 |
+| [开发与调试](docs/development.md) | 项目结构、USB-JTAG、VS Code 与 clangd 排障 |
