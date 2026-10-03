@@ -36,4 +36,6 @@ extern "C" void app_main(void) {
     static auto led = std::make_unique<Ws2812Controller>(48);
     static auto server = std::make_unique<WebServer>(NetworkScanner::instance(), *led);
     server->start(config->staticIp);
+    ESP_LOGI(TAG, "启动完成，主任务栈历史最小余量: %u 字节",
+             static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
 }

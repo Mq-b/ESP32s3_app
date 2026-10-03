@@ -1,6 +1,5 @@
 #include "app_config.h"
 
-#include "cJSON.h"
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "nvs.h"
@@ -8,8 +7,7 @@
 #include <array>
 #include <cerrno>
 #include <cstdio>
-#include <cstring>
-#include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <unistd.h>
 
@@ -22,7 +20,9 @@ constexpr const char *TEMP_PATH = "/spiffs/wifi.tmp";
 constexpr const char *NVS_NAMESPACE = "wifi_config";
 constexpr size_t MAX_CONFIG_SIZE = 1024;
 bool spiffsMounted = false;
-using JsonPtr = std::unique_ptr<cJSON, decltype(&cJSON_Delete)>;
+using Json = nlohmann::ordered_json;
+constexpr std::array<const char *, 5> CONFIG_KEYS = {
+    "ssid", "password", "static_ip", "gateway", "netmask"};
 
 /** @brief 尝试挂载 SPIFFS，禁止自动格式化，挂载失败时仍允许通过 NVS 配网。 */
 void mountSpiffs() {
@@ -112,17 +112,11 @@ bool parseIpv4(const std::string &text, uint32_t &address) {
 
 /** @brief 序列化完整配置，正确转义 SSID 与密码中的特殊字符。 */
 std::string serialize(const AppConfig &config) {
-    JsonPtr root(cJSON_CreateObject(), cJSON_Delete);
-    if (!root || !cJSON_AddStringToObject(root.get(), "ssid", config.ssid.c_str()) ||
-        !cJSON_AddStringToObject(root.get(), "password", config.password.c_str()) ||
-        !cJSON_AddStringToObject(root.get(), "static_ip", config.staticIp.c_str()) ||
-        !cJSON_AddStringToObject(root.get(), "gateway", config.gateway.c_str()) ||
-        !cJSON_AddStringToObject(root.get(), "netmask", config.netmask.c_str())) return {};
-    char *text = cJSON_PrintUnformatted(root.get());
-    if (!text) return {};
-    std::string json(text);
-    cJSON_free(text);
-    return json;
+    const Json root = {{"ssid", config.ssid}, {"password", config.password},
+                       {"static_ip", config.staticIp}, {"gateway", config.gateway},
+                       {"netmask", config.netmask}};
+    // 禁用异常时也不能因非法 UTF-8 中止任务；保存前会核对是否发生替换。
+    return root.dump(-1, ' ', false, Json::error_handler_t::replace);
 }
 
 /** @brief 通过临时文件同步配置；NVS 副本用于弥补 SPIFFS 非事务性写入。 */
@@ -155,28 +149,38 @@ bool AppConfig::parse(const std::string &json, AppConfig &config, std::string &e
         error = "配置必须为扁平 JSON 对象";
         return false;
     }
-    JsonPtr root(cJSON_ParseWithOpts(json.c_str(), nullptr, true), cJSON_Delete);
-    if (!root || !cJSON_IsObject(root.get())) {
+    // DOM 会覆盖同名键，在解析回调中统计必填字段以保留重复字段检测。
+    std::array<size_t, CONFIG_KEYS.size()> counts{};
+    const auto countFields = [&counts](int, Json::parse_event_t event, Json &value) {
+        if (event == Json::parse_event_t::key) {
+            const auto &key = value.get_ref<const Json::string_t &>();
+            for (size_t i = 0; i < CONFIG_KEYS.size(); ++i) {
+                if (key == CONFIG_KEYS[i]) ++counts[i];
+            }
+        }
+        return true;
+    };
+    const Json root = Json::parse(json, countFields, false);
+    if (root.is_discarded() || !root.is_object()) {
         error = "配置不是合法 JSON 对象";
         return false;
     }
     AppConfig candidate;
-    const char *keys[] = {"ssid", "password", "static_ip", "gateway", "netmask"};
     std::string *values[] = {&candidate.ssid, &candidate.password, &candidate.staticIp,
                              &candidate.gateway, &candidate.netmask};
-    for (size_t i = 0; i < 5; ++i) {
-        const cJSON *item = cJSON_GetObjectItemCaseSensitive(root.get(), keys[i]);
-        if (!cJSON_IsString(item)) {
-            error = std::string("缺少字符串字段: ") + keys[i];
+    for (size_t i = 0; i < CONFIG_KEYS.size(); ++i) {
+        const auto item = root.find(CONFIG_KEYS[i]);
+        if (item == root.end() || !item->is_string()) {
+            error = std::string("缺少字符串字段: ") + CONFIG_KEYS[i];
             return false;
         }
-        *values[i] = item->valuestring;
-        int count = 0;
-        for (const cJSON *field = root->child; field; field = field->next) {
-            if (std::strcmp(field->string, keys[i]) == 0) ++count;
+        if (counts[i] != 1) {
+            error = std::string("字段重复: ") + CONFIG_KEYS[i];
+            return false;
         }
-        if (count != 1) {
-            error = std::string("字段重复: ") + keys[i];
+        *values[i] = item->get_ref<const Json::string_t &>();
+        if (values[i]->find('\0') != std::string::npos) {
+            error = "配置包含空字符";
             return false;
         }
     }
@@ -235,7 +239,11 @@ esp_err_t AppConfig::save() const {
     if (json.empty()) return ESP_ERR_NO_MEM;
     AppConfig validated;
     std::string error;
-    if (!parse(json, validated, error)) return ESP_ERR_INVALID_ARG;
+    if (!parse(json, validated, error) || validated.ssid != ssid ||
+        validated.password != password || validated.staticIp != staticIp ||
+        validated.gateway != gateway || validated.netmask != netmask) {
+        return ESP_ERR_INVALID_ARG;
+    }
     nvs_handle_t handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
     if (err != ESP_OK) return err;

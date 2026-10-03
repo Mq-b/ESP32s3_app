@@ -14,6 +14,8 @@
 #include <cerrno>
 #include <cstring>
 #include <format>
+#include <nlohmann/json.hpp>
+#include <utility>
 
 static const char *TAG = "SCAN";
 
@@ -269,16 +271,17 @@ std::vector<DeviceInfo> NetworkScanner::devices() const {
 std::string NetworkScanner::devicesJson() const {
     std::vector<DeviceInfo> copy = devices();
 
-    std::string json = std::format("{{\"scanning\":{},\"count\":{},\"devices\":[",
-                                   busy_.load(), copy.size());
-    for (size_t i = 0; i < copy.size(); i++) {
-        const auto &d = copy[i];
-        json += std::format(
-            "{{\"ip\":\"{}\",\"mac\":\"{}\",\"ttl\":{},\"rtt_ms\":{}.{:03},\"ping\":{},\"os\":\"{}\"}}",
-            ipToString(d.ipHost), macToString(d.mac), (unsigned)d.ttl, d.rttUs / 1000,
-            d.rttUs % 1000, d.viaPing, d.osGuess);
-        if (i + 1 < copy.size()) json += ",";
+    using Json = nlohmann::ordered_json;
+    Json entries = Json::array();
+    for (const auto &device : copy) {
+        entries.push_back({{"ip", ipToString(device.ipHost)},
+                           {"mac", macToString(device.mac)},
+                           {"ttl", device.ttl},
+                           {"rtt_ms", device.rttUs / 1000.0},
+                           {"ping", device.viaPing},
+                           {"os", device.osGuess}});
     }
-    json += "]}";
-    return json;
+    const Json root = {{"scanning", busy_.load()}, {"count", copy.size()},
+                       {"devices", std::move(entries)}};
+    return root.dump(-1, ' ', false, Json::error_handler_t::replace);
 }

@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <nlohmann/json.hpp>
 #include <string>
 
 static const char *TAG = "HTTP";
@@ -186,12 +187,22 @@ esp_err_t devicesHandler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+/**
+ * @brief 使用统一 JSON 库序列化并发送 HTTP 响应。
+ * @param req 当前 HTTP 请求。
+ * @param body 待发送的 JSON 值，字符串必须为合法 UTF-8。
+ * @return HTTP 响应发送结果。
+ */
+esp_err_t sendJsonResponse(httpd_req_t *req, const nlohmann::ordered_json &body) {
+    const std::string response = body.dump();
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, response.c_str(), response.size());
+}
+
 esp_err_t scanHandler(httpd_req_t *req) {
     auto *scanner = static_cast<NetworkScanner *>(req->user_ctx);
     scanner->startAsync();
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, "{\"ok\":true}", HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
+    return sendJsonResponse(req, {{"ok", true}});
 }
 
 const char *ledModeName(Ws2812Mode mode) {
@@ -235,14 +246,11 @@ bool readRequestedColor(const char *query, Ws2812Color &color) {
 esp_err_t ledStatusHandler(httpd_req_t *req) {
     auto *led = static_cast<Ws2812Controller *>(req->user_ctx);
     const Ws2812Color color = led->color();
-    const std::string response = std::string("{\"mode\":\"") + ledModeName(led->mode()) +
-                                 "\",\"r\":" + std::to_string(color.red) +
-                                 ",\"g\":" + std::to_string(color.green) +
-                                 ",\"b\":" + std::to_string(color.blue) + "}";
-    httpd_resp_set_type(req, "application/json");
+    const nlohmann::ordered_json response = {{"mode", ledModeName(led->mode())},
+                                             {"r", color.red}, {"g", color.green},
+                                             {"b", color.blue}};
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    httpd_resp_send(req, response.c_str(), response.size());
-    return ESP_OK;
+    return sendJsonResponse(req, response);
 }
 
 esp_err_t ledControlHandler(httpd_req_t *req) {
@@ -273,9 +281,7 @@ esp_err_t ledControlHandler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, "{\"ok\":true}", HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
+    return sendJsonResponse(req, {{"ok", true}});
 }
 
 }  // namespace
@@ -283,6 +289,8 @@ esp_err_t ledControlHandler(httpd_req_t *req) {
 void WebServer::start(const std::string &deviceIp) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 80;
+    // JSON 构造和序列化需要额外栈空间，避免 HTTP 请求触发栈溢出。
+    config.stack_size = 8192;
 
     httpd_handle_t server = nullptr;
     ESP_ERROR_CHECK(httpd_start(&server, &config));
