@@ -13,7 +13,7 @@
 | 0x9000 | nvs | 24KB | WiFi 校准等键值存储 |
 | 0xF000 | phy_init | 4KB | 射频校准数据 |
 | 0x10000 | factory | 2MB | 应用固件 |
-| 0x210000 | storage | 1MB | SPIFFS，存放 wifi.json |
+| 0x210000 | storage | 1MB | SPIFFS，存放 index.html 首页与 wifi.json 配置 |
 | 0x310000 起 | 未分配 | ~4.9MB | 预留扩展（OTA / 更多存储） |
 
 ## 硬件资源

@@ -4,8 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../main/web_server.cpp'), 'utf8');
-const html = source.match(/R"HTML\(([\s\S]*?)\)HTML"/)[1];
+const html = fs.readFileSync(path.join(__dirname, '../data/index.html'), 'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const monitorScript = script.slice(0, script.indexOf('refreshSystem();'));
 

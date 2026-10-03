@@ -11,7 +11,8 @@ main/
   main.cpp          入口：初始化 NVS → 加载配置 → 启动 BLE / WiFi / HTTP 服务
   app_config.*      挂载 SPIFFS，校验 JSON，优先加载 NVS 配置并同步 /spiffs/wifi.json（nlohmann-json）
   wifi_manager.*    STA 连接、固定 IP、事件处理与自动重连
-  web_server.*      HTTP 服务与首页 HTML
+  web_server.*      HTTP 服务与 API 路由
+  web_assets.*      HTML 文件按 1024 字节分块发送
   ble_config_service.* BLE 广播发现、认证配对与网络配置读写
 tools/
   configure_wifi.pyw 单文件蓝牙配网 GUI
@@ -21,7 +22,10 @@ tests/
   run_app_config_tests.py 主机编译入口，提供最小 ESP-IDF 桩
   test_system_monitor.cpp 系统状态 JSON 与 CPU 采样回归测试
   run_system_monitor_tests.py 系统状态主机测试入口
+  test_web_assets.cpp HTML 文件分块发送及失败路径回归测试
+  run_web_assets_tests.py HTML 文件发送主机测试入口
 data/
+  index.html        首页 HTML、CSS 与 JavaScript，随 SPIFFS 镜像烧录
   wifi.json         真实凭据（已 gitignore，需自行创建）
   wifi.example.json 配置模板（复制为 wifi.json 并填写）
 partitions.csv      分区表：factory 2MB + storage(SPIFFS) 1MB
@@ -38,6 +42,7 @@ partitions.csv      分区表：factory 2MB + storage(SPIFFS) 1MB
 ```powershell
 python tests/run_app_config_tests.py
 python tests/run_system_monitor_tests.py
+python tests/run_web_assets_tests.py
 # 编译器不在 PATH 时指定路径：
 python tests/run_app_config_tests.py --cxx <主机编译器路径>
 python -m unittest discover -s tests -p "test_*.py"
@@ -45,6 +50,16 @@ node --test tests/test_system_monitor_ui.cjs
 ```
 
 固件配置与系统状态测试直接编译真实实现，并使用 `-fno-exceptions`、`-Wall -Wextra -Werror`。ESP-IDF 接口使用最小桩，不访问真实 NVS、SPIFFS 或开发板；BLE 任务栈、存储读写及上板运行仍需硬件验证。
+
+## 首页文件与 SPIFFS
+
+首页源码位于 `data/index.html`，不再作为 C++ 字符串编入应用。`spiffs_create_partition_image(storage ../data FLASH_IN_PROJECT)` 将其与网络配置一起打包到 `storage.bin`，正常 `idf.py flash` 会烧录该镜像。
+
+启动配置加载时挂载 SPIFFS；HTTP 服务收到首页请求后打开 `/spiffs/index.html`，通过固定 1024 字节缓冲区调用 `httpd_resp_send_chunk()`，不会启动时加载或按请求复制整个页面。文件句柄在成功及失败路径均自动关闭。文件缺失返回 404，其他打开错误或首次读取失败返回 500；开始发送后读取或发送失败会终止连接，不补发正常结束块。
+
+修改页面后须重新构建并烧录 SPIFFS 镜像，只更新应用分区不会更新首页。SPIFFS 挂载失败或镜像不含 `index.html` 时首页不可用，但 API 路由仍保留。烧录 `storage.bin` 会覆盖该分区原有文件，包括 `wifi.json`；NVS 配置副本不会因正常烧录而擦除，下次启动时优先使用 NVS 并同步配置文件。
+
+`run_web_assets_tests.py` 验证实际 HTML 内容的多块发送、空文件、文件缺失/不可读、响应类型设置失败以及数据块/结束块发送失败；页面脚本测试直接读取 `data/index.html`。
 
 ## JSON 调用的任务栈配置
 
