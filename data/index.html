@@ -2,68 +2,55 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP32-S3 · 设备监控</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>ESP32-S3 · 设备控制台</title>
 <style>
-* { box-sizing: border-box; margin: 0; }
-body { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-       background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 36px 20px; }
-.wrap { max-width: 820px; margin: 0 auto; }
-h1 { font-size: 20px; font-weight: 600; color: #38bdf8; }
-.sub { font-size: 12px; color: #64748b; margin: 4px 0 22px; }
-.bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 13px; color: #94a3b8; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: pulse 1.2s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: .25; } }
-label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-.card { background: #1e293b; border: 1px solid #2c3a52; border-radius: 14px; overflow: hidden; }
-.ledbar { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 12px 14px; }
-.ledbar span { color: #94a3b8; font-size: 13px; margin-right: auto; }
-.color-picker { width: 42px; height: 32px; padding: 2px; border: 1px solid #3b4d6d; border-radius: 8px; background: #263852; cursor: pointer; }
-.rgb-value { min-width: 92px; margin-right: 4px !important; font-family: ui-monospace, Consolas, monospace; font-size: 12px !important; }
-button { border: 1px solid #3b4d6d; border-radius: 8px; background: #263852; color: #cbd5e1; padding: 7px 12px; cursor: pointer; }
-button:hover, button.active { background: #0369a1; border-color: #38bdf8; color: white; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { text-align: left; padding: 11px 16px; font-size: 11px; font-weight: 500; color: #64748b; text-transform: uppercase; letter-spacing: 1px; background: #182238; }
-td { padding: 11px 16px; border-top: 1px solid #26334a; }
-tbody tr:hover { background: #243149; }
-.mono { font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 13px; }
-.badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
-.win { background: #164e63; color: #67e8f9; }.nix { background: #14532d; color: #86efac; }.net { background: #713f12; color: #fde047; }.esp { background: #3730a3; color: #c7d2fe; }.unk { background: #3f3f46; color: #d4d4d8; }
-.dim { color: #64748b; font-size: 12px; }.empty { padding: 48px; text-align: center; color: #64748b; }
-.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-.metric { padding: 16px; }
-.metric h2 { font-size: 13px; color: #94a3b8; font-weight: 500; margin-bottom: 10px; }
-.metric strong { display: block; font-size: 24px; font-weight: 600; margin-bottom: 8px; }
-.metric p { color: #94a3b8; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
-.meter { height: 6px; background: #0f172a; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
-.meter i { display: block; height: 100%; width: 0; background: #38bdf8; transition: width .3s; }
-.resource-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; font-size: 12px; color: #94a3b8; }
-@media (max-width: 540px) { .metrics { grid-template-columns: 1fr; } }
+/* 基础设计变量：离线运行，不依赖外部字体、样式或图标。 */
+:root{color-scheme:dark;--bg:#0d1117;--panel:#151b23;--raised:#1c2430;--border:#293341;--text:#e7edf5;--muted:#8b9aaf;--accent:#70c9b8;--blue:#82b8f8;--mono:"SFMono-Regular",Consolas,monospace}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:88px}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}button,input{font:inherit}button,a,input{-webkit-tap-highlight-color:transparent}button{cursor:pointer}button:disabled{opacity:.45;cursor:wait}a{color:inherit;text-decoration:none}button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:4px}button{transition:background .18s,border-color .18s}svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}h1,h2,h3,p{margin:0}h1{font-size:28px;font-weight:650;letter-spacing:-.8px;line-height:1.4}h2{font-size:17px;font-weight:600}h3{font-size:13px;font-weight:500}small{font-size:11px}.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}.dim{color:var(--muted)}
+/* 顶部导航与页面结构。 */
+.topbar{border-bottom:1px solid var(--border);background:var(--bg)}.top-inner{max-width:1200px;margin:auto;padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:650;letter-spacing:.2px}.brand-icon{width:33px;height:33px;background:#70c9b812;color:var(--accent);border:1px solid #70c9b833;border-radius:9px;display:grid;place-items:center}.brand small{font-weight:400;color:var(--muted);border-left:1px solid var(--border);padding-left:12px;margin-left:4px}.nav{display:flex;gap:26px;color:var(--muted);font-size:13px}.nav a:hover{color:var(--text)}.nav a:first-child{color:var(--accent)}.wrap{max-width:1200px;margin:auto;padding:34px 28px 24px}.page-head{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:30px}.eyebrow{color:var(--accent);font-size:10px;letter-spacing:2px;font-weight:600;margin-bottom:7px}.page-head p{color:var(--muted);margin-top:7px;font-size:13px}.connection{display:flex;align-items:center;gap:8px;border:1px solid var(--border);padding:8px 12px;border-radius:7px;font-size:12px;color:var(--muted);white-space:nowrap}.connection[data-state="online"]{color:var(--accent)}.connection[data-state="offline"]{color:#efa6a6}.signal{width:7px;height:7px;background:currentColor;border-radius:50%;flex:none}.module{margin-bottom:26px;min-width:0;scroll-margin-top:20px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:14px}.section-title{display:flex;align-items:center;gap:10px}.section-no{font-family:var(--mono);font-size:10px;color:#708095;border:1px solid var(--border);width:25px;height:25px;display:grid;place-items:center;border-radius:6px}.section-caption{color:var(--muted);font-size:11px}.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+/* 资源模块：桌面四列，平板两列，窄屏单列。 */
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric{padding:19px 18px;position:relative;min-width:0}.metric-head{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#bdc9d9}.metric-head svg{color:#667a92;width:17px;height:17px}.metric-label{display:block;font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:.6px}.metric strong{display:block;margin:15px 0 15px;font-family:var(--mono);font-size:29px;line-height:1.3;font-weight:500;letter-spacing:-1px;overflow-wrap:anywhere}.metric strong[data-unavailable="true"]{font-family:inherit;font-size:20px;letter-spacing:0;line-height:1.9;color:var(--muted)}.meter{height:4px;border-radius:4px;background:#27313e;overflow:hidden}.meter i{display:block;height:100%;width:0;background:var(--accent);border-radius:4px;transition:width .4s}.metric:nth-child(2) .meter i{background:var(--blue)}.metric:nth-child(3) .meter i{background:#b8a2df}.metric:nth-child(4) .meter i{background:#d6b47e}.metric p{font-size:11px;color:var(--muted);line-height:1.8;margin-top:13px;min-height:40px;overflow-wrap:anywhere}.resource-bar{display:flex;justify-content:space-between;gap:16px;margin-top:12px;font-size:11px;color:var(--muted);padding:0 2px}.resource-bar #systemStatus{flex:none}.resource-bar #systemInfo{text-align:right}
+/* 模块分栏与独立灯光控制。 */
+.control-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}.network-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid var(--border)}.scan-info{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}.scan-info[data-state="online"]{color:var(--accent)}.scan-info[data-state="offline"]{color:#efa6a6}.scan-info[data-state="scanning"]{color:var(--blue)}.scan-actions{display:flex;align-items:center;gap:14px}.switch-label{display:flex;align-items:center;gap:8px;color:#b2bfd0;cursor:pointer;font-size:11px;white-space:nowrap}.switch-label input{appearance:none;-webkit-appearance:none;width:28px;height:16px;background:#303b49;border-radius:20px;margin:0;position:relative;cursor:pointer;transition:background .2s}.switch-label input:before{content:"";width:10px;height:10px;background:#cbd5e1;position:absolute;left:3px;top:3px;border-radius:50%;transition:transform .2s}.switch-label input:checked{background:#3d8679}.switch-label input:checked:before{transform:translateX(12px);background:#fff}.button{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:7px 11px;min-height:36px;border-radius:6px;border:1px solid var(--border);background:var(--raised);color:#c5d1df;font-size:12px}.button:hover{background:#273343;border-color:#43546b}.button svg{width:14px;height:14px}.count{font-family:var(--mono);font-size:11px;background:#26302d;border:1px solid #35473e;color:var(--accent);border-radius:5px;padding:1px 7px;margin-left:1px}.section-head p{font-size:11px;color:var(--muted);margin-top:4px}.led-content{padding:22px}.led-top{display:flex;justify-content:space-between;align-items:center}.led-type{color:var(--muted);font-family:var(--mono);font-size:11px}.led-state{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px}.led-state[data-state="online"]{color:var(--accent)}.led-state[data-state="offline"]{color:#efa6a6}.led-preview{display:flex;align-items:center;gap:17px;margin:26px 0}.color-wheel{position:relative;width:66px;height:66px;flex:none;border-radius:16px;background:linear-gradient(145deg,#242f3c,#111820);border:1px solid #354354;display:grid;place-items:center}.color-wheel:before{content:"";width:32px;height:32px;background:var(--led-color,#101010);border-radius:50%;box-shadow:0 0 20px var(--led-glow,transparent);border:1px solid #ffffff24}.color-picker{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.color-meta strong{display:block;font-family:var(--mono);font-size:18px;font-weight:500}.color-meta span{color:var(--muted);font-family:var(--mono);font-size:10px}.color-meta small{display:block;font-size:10px;color:var(--muted);margin-top:5px}.mode-label{font-size:11px;color:var(--muted);margin-bottom:9px}.mode-group{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:#0d131b;border:1px solid var(--border);padding:4px;border-radius:8px}.mode-group button{border:1px solid transparent;background:transparent;color:var(--muted);border-radius:5px;padding:8px 4px;min-height:38px;font-size:12px}.mode-group button:hover{background:var(--raised);color:var(--text)}.mode-group button.active{color:var(--accent);background:#70c9b814;border-color:#70c9b82b}.led-note{font-size:11px;color:var(--muted);margin-top:18px;border-top:1px solid var(--border);padding-top:16px;line-height:1.8}.led-note b{font-weight:400;color:#c0ccda}
+/* 设备表与移动端卡片列表。 */
+table{width:100%;border-collapse:collapse;text-align:left;white-space:nowrap}thead{background:#19212c}th{font-size:10px;color:#8999af;font-weight:500;letter-spacing:.4px;padding:12px 15px}td{padding:15px;border-top:1px solid #26303d;font-size:11px}td:first-child{color:#d7e5f2}td:nth-child(2){color:#8b9aaf;font-size:10px}tbody tr:hover{background:#1a232f}.badge{display:inline-flex;align-items:center;border:1px solid #ffffff12;background:#25303e;color:#b6c9e1;border-radius:5px;padding:2px 6px;font-size:10px}.badge.win{color:#a4caff;background:#26364c}.badge.lin{color:#d9c692;background:#353127}.badge.net{color:#9acbbd;background:#233932}.badge.esp{color:#bba8e0;background:#332d42}.badge.unk{color:#99a7b9}.empty{padding:42px 18px 46px;text-align:center;color:var(--muted);font-size:12px}.empty svg{width:27px;height:27px;color:#52677f;margin-bottom:10px}.empty p{margin-top:5px;color:#66788f;font-size:11px}.table-caption{padding:11px 18px;border-top:1px solid var(--border);color:#6f8197;font-size:10px;display:flex;justify-content:space-between;gap:12px}.footer{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--border);padding-top:18px;font-size:10px;color:#68788d;margin-top:10px}.footer span:last-child{font-family:var(--mono)}
+@media(min-width:1000px){.network{min-height:362px}}
+@media(max-width:1000px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.control-grid{grid-template-columns:1fr}.led-content{display:grid;grid-template-columns:1fr 1fr;column-gap:28px}.led-top{grid-column:1/-1}.led-preview{grid-row:2/4;margin:20px 0}.mode-label{margin-top:20px}.led-note{grid-column:1/-1;margin-top:4px}.metric p{min-height:20px}}
+@media(max-width:640px){.top-inner{padding:15px 18px}.brand small{display:none}.nav{gap:16px;font-size:11px}.wrap{padding:25px 18px 20px}.page-head{align-items:flex-start;flex-direction:column;gap:13px;margin-bottom:25px}h1{font-size:25px}.page-head p{font-size:12px}.connection{padding:6px 9px;font-size:10px}.section-caption{font-size:10px}.resource-bar{flex-direction:column;gap:4px;font-size:10px}.resource-bar #systemInfo{text-align:left}.metric{padding:16px}.metric strong{font-size:26px}.metric p{min-height:40px}.section-head{gap:10px}.network-toolbar{padding:13px 14px;gap:8px}.scan-actions{gap:10px}.switch-label{font-size:10px}.button{padding:6px 9px}.button .button-label{display:none}.button svg{width:17px;height:17px}thead{display:none}table,tbody{display:block}tr{display:grid;grid-template-columns:1fr auto;gap:8px 12px;border-bottom:1px solid var(--border);padding:16px}td{border:0;padding:0;min-width:0;white-space:normal}td:first-child{font-size:14px;grid-column:1;grid-row:1}td:nth-child(2){grid-column:1;grid-row:2}td:nth-child(3){grid-column:2;grid-row:1}td:nth-child(4){grid-column:2;grid-row:2;text-align:right}td:nth-child(5){grid-column:1/-1;font-size:10px}td:nth-child(5):before{content:"发现方式 · ";color:#61748c}.table-caption{font-size:9px;padding:11px 14px}.empty{padding:34px 16px}.led-content{display:block;padding:18px}.led-preview{margin:23px 0}.mode-label{margin-top:0}.led-note{margin-top:18px}.color-wheel{width:54px;height:54px;border-radius:13px}.led-preview{gap:12px}.color-meta strong{font-size:15px}.color-meta span{font-size:10px;white-space:nowrap}.mode-group button{font-size:11px}.footer{flex-direction:column;gap:4px}.module{margin-bottom:23px}}
+@media(max-width:380px){.metrics{grid-template-columns:1fr}.metric p{min-height:0}.metric strong{margin:12px 0}.led-content{display:block}.led-preview{margin:23px 0}.mode-label{margin-top:0}.led-note{margin-top:18px}.nav{gap:10px}.brand{font-size:13px}.section-head h2{font-size:16px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before{transition:none!important}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>ESP32-S3 · 设备监控</h1>
-  <p class="sub">资源监控每 2 秒刷新 · CPU 为采样窗口内调度负载估算</p>
-  <div class="resource-bar"><span id="systemStatus" role="status">资源读取中…</span><span id="systemInfo"></span></div>
-  <div class="metrics">
-    <section class="card metric"><h2>CPU 使用率</h2><strong id="cpuValue">—</strong><div class="meter"><i id="cpuMeter"></i></div><p id="cpuDetail">等待采样</p></section>
-    <section class="card metric"><h2>内部 RAM · 可分配堆</h2><strong id="ramValue">—</strong><div class="meter"><i id="ramMeter"></i></div><p id="ramDetail">读取中…</p></section>
-    <section class="card metric"><h2>PSRAM · 可分配堆</h2><strong id="psramValue">—</strong><div class="meter"><i id="psramMeter"></i></div><p id="psramDetail">读取中…</p></section>
-    <section class="card metric"><h2>SPIFFS · 文件存储</h2><strong id="storageValue">—</strong><div class="meter"><i id="storageMeter"></i></div><p id="storageDetail">读取中…</p></section>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><defs>
+<symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 1v5m6-5v5M9 18v5m6-5v5M1 9h5m-5 6h5m12-6h5m-5 6h5"/><rect x="9" y="9" width="6" height="6" rx="1"/></symbol>
+<symbol id="i-memory" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M7 9v4m5-4v4m5-4v4M6 17v3m4-3v3m4-3v3m4-3v3"/></symbol>
+<symbol id="i-drive" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M4 15h16m-5 3h2M8 7h8m-8 3h5"/></symbol>
+<symbol id="i-scan" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M7 12h10m-5-5v10"/></symbol>
+<symbol id="i-network" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="6" rx="1"/><path d="M12 8v5M4 17v-4h16v4"/><rect x="1" y="17" width="6" height="5" rx="1"/><rect x="9" y="17" width="6" height="5" rx="1"/><rect x="17" y="17" width="6" height="5" rx="1"/></symbol>
+</defs></svg>
+<header class="topbar"><div class="top-inner"><a class="brand" href="#overview" aria-label="ESP32-S3 设备控制台首页"><span class="brand-icon"><svg aria-hidden="true"><use href="#i-chip"></use></svg></span>ESP32-S3 <small>DEVICE CONSOLE</small></a><nav class="nav" aria-label="模块导航"><a href="#overview">概览</a><a href="#network">网络</a><a href="#lighting">灯光</a></nav></div></header>
+<main class="wrap">
+  <div class="page-head"><div><div class="eyebrow">LOCAL DEVICE / 本地设备</div><h1>设备控制台</h1><p>实时资源、网络发现与板载灯光，一处掌控。</p></div><div class="connection" id="connection" data-state="pending"><span class="signal"></span><span id="connectionText" role="status">正在连接设备</span></div></div>
+  <!-- 模块一：系统资源，独立轮询并清除失效数据。 -->
+  <section class="module" id="overview" aria-labelledby="overviewTitle"><div class="section-head"><div class="section-title"><span class="section-no">01</span><h2 id="overviewTitle">系统概览</h2></div><span class="section-caption">每 2 秒更新 · 实时采样</span></div><div class="metrics"><article class="card metric"><div class="metric-head"><h3>CPU 使用率</h3><svg aria-hidden="true"><use href="#i-chip"></use></svg></div><span class="metric-label">双核调度负载</span><strong id="cpuValue">—</strong><div class="meter"><i id="cpuMeter"></i></div><p id="cpuDetail">等待设备数据</p></article>
+<article class="card metric"><div class="metric-head"><h3>内部 RAM</h3><svg aria-hidden="true"><use href="#i-memory"></use></svg></div><span class="metric-label">可分配堆 · 使用率</span><strong id="ramValue">—</strong><div class="meter"><i id="ramMeter"></i></div><p id="ramDetail">等待设备数据</p></article>
+<article class="card metric"><div class="metric-head"><h3>扩展 PSRAM</h3><svg aria-hidden="true"><use href="#i-memory"></use></svg></div><span class="metric-label">可分配堆 · 使用率</span><strong id="psramValue">—</strong><div class="meter"><i id="psramMeter"></i></div><p id="psramDetail">等待设备数据</p></article>
+<article class="card metric"><div class="metric-head"><h3>文件存储</h3><svg aria-hidden="true"><use href="#i-drive"></use></svg></div><span class="metric-label">SPIFFS · 使用率</span><strong id="storageValue">—</strong><div class="meter"><i id="storageMeter"></i></div><p id="storageDetail">等待设备数据</p></article>
+</div><div class="resource-bar"><span id="systemStatus" role="status">资源读取中…</span><span id="systemInfo">等待设备信息</span></div></section>
+  <div class="control-grid">
+  <!-- 模块二：网络发现，手机上将表格切换为设备卡片。 -->
+  <section class="module" id="network" aria-labelledby="networkTitle"><div class="section-head"><div><div class="section-title"><span class="section-no">02</span><h2 id="networkTitle">网络设备</h2><span class="count" id="deviceCount">—</span></div><p id="sub">本地网络 · /24 网段发现</p></div></div><div class="card network"><div class="network-toolbar"><div class="scan-info" id="scanState" data-state="pending"><span class="signal"></span><span id="status" role="status">准备连接</span></div><div class="scan-actions"><label class="switch-label"><input type="checkbox" id="auto" checked role="switch">持续扫描</label><button class="button" id="scanButton" type="button" aria-label="开始一次网络扫描"><svg aria-hidden="true"><use href="#i-scan"></use></svg><span class="button-label">扫描</span></button></div></div><table aria-label="发现的网络设备"><thead><tr><th scope="col">IP 地址</th><th scope="col">MAC 地址</th><th scope="col">系统</th><th scope="col">延迟</th><th scope="col">来源</th></tr></thead><tbody id="rows"></tbody></table><div class="empty" id="empty"><svg aria-hidden="true"><use href="#i-network"></use></svg><div id="emptyTitle">等待扫描结果</div><p id="emptyHint">连接设备后自动发现当前网段</p></div><div class="table-caption"><span>ICMP / ARP · 系统由 TTL 推测</span><span>仅扫描本地 /24 网段</span></div></div></section>
+  <!-- 模块三：灯光控制，与网络扫描独立。 -->
+  <section class="module" id="lighting" aria-labelledby="lightingTitle"><div class="section-head"><div class="section-title"><span class="section-no">03</span><h2 id="lightingTitle">灯光控制</h2></div><span class="section-caption">板载 RGB</span></div><div class="card"><div class="led-content"><div class="led-top"><span class="led-type">WS2812 / GPIO 48</span><span class="led-state" id="ledState" data-state="pending"><span class="signal"></span><b id="ledStatus" style="font-weight:400" role="status">读取中</b></span></div><div class="led-preview"><div class="color-wheel" id="colorPreview"><input class="color-picker" id="ledColor" type="color" value="#101010" aria-label="选择灯光颜色" title="选择灯光颜色"></div><div class="color-meta"><strong id="hexValue">#101010</strong><span id="rgbValue">RGB(16, 16, 16)</span><small>点击色块选择颜色</small></div></div><div class="mode-label">工作模式</div><div class="mode-group" role="group" aria-label="灯光工作模式"><button type="button" data-mode="off" aria-pressed="false">关闭</button><button type="button" data-mode="on" aria-pressed="false">常亮</button><button type="button" data-mode="blink" aria-pressed="false">闪烁</button></div><p class="led-note">颜色与模式实时同步到设备。<br><b>闪烁周期</b> · 亮 500 ms / 灭 500 ms</p></div></div></section>
   </div>
-  <h1>内网设备</h1>
-  <p class="sub" id="sub">ESP32-S3 · 持续扫描 /24 网段</p>
-  <div class="bar"><span class="dot"></span><span id="status">准备中…</span><label style="margin-left:auto"><input type="checkbox" id="auto" checked>持续扫描</label></div>
-  <div class="card ledbar">
-    <span>板载 WS2812：<b id="ledStatus">读取中…</b></span>
-    <input class="color-picker" id="ledColor" type="color" value="#101010" title="选择 RGB 颜色">
-    <span class="rgb-value" id="rgbValue">RGB(16, 16, 16)</span>
-    <button data-mode="off">关闭</button><button data-mode="on">常亮</button><button data-mode="blink">闪烁</button>
-  </div>
-  <div class="card"><table><thead><tr><th>IP 地址</th><th>MAC 地址</th><th>系统</th><th>延迟</th><th>来源</th></tr></thead><tbody id="rows"></tbody></table><div class="empty" id="empty">正在扫描网段…</div></div>
-</div>
+  <footer class="footer"><span>本地直连 · 无需云端 · CPU 为采样窗口内调度负载估算</span><span>ESP32-S3 / DEVICE CONSOLE</span></footer>
+</main>
 <script>
+
 const $ = id => document.getElementById(id);
 /** @brief 将字节数格式化为可读容量。 */
 function formatBytes(value) {
@@ -74,6 +61,7 @@ function formatBytes(value) {
 /** @brief 渲染使用率文字及进度条；无数据时清除旧值。 */
 function showUsage(prefix, percent, unavailable = '—') {
   $(prefix + 'Value').textContent = percent === null ? unavailable : percent.toFixed(1) + '%';
+  if ($(prefix + 'Value').dataset) $(prefix + 'Value').dataset.unavailable = String(percent === null);
   $(prefix + 'Meter').style.width = percent === null ? '0%' : Math.max(0, Math.min(100, percent)) + '%';
 }
 /** @brief 渲染可分配堆容量，不将其误标为芯片物理 RAM 总量。 */
@@ -122,21 +110,119 @@ async function refreshSystem() {
   }
 }
 refreshSystem();
-const badge = os => { if (os.startsWith('Windows')) return ['win', 'Windows']; if (os.startsWith('Linux')) return ['nix', 'Linux / macOS']; if (os.startsWith('Network')) return ['net', '网络设备']; if (os.startsWith('ESP32')) return ['esp', 'ESP32-S3']; return ['unk', os || '未知']; };
-function row(v) { const [cls, label] = badge(v.os); return '<tr><td class="mono">' + v.ip + '</td><td class="mono">' + v.mac + '</td><td><span class="badge ' + cls + '" title="TTL ' + v.ttl + '">' + label + '</span></td><td class="mono">' + (v.ping ? v.rtt_ms + ' ms' : '—') + '</td><td class="dim">' + (v.ping ? 'ICMP' : 'ARP') + '</td></tr>'; }
-async function refresh() { try { const j = await (await fetch('/api/devices', { cache: 'no-store' })).json(); $('rows').innerHTML = j.devices.map(row).join(''); $('empty').style.display = j.count ? 'none' : 'block'; $('status').textContent = j.scanning ? '扫描中…' : '空闲'; $('sub').textContent = 'ESP32-S3 · ' + location.hostname + ' · ' + j.count + ' 台设备'; if (!j.scanning && $('auto').checked) fetch('/api/scan', { method: 'POST' }).catch(() => {}); } catch (e) { $('status').textContent = '连接失败'; } }
+// 网络发现模块：不插入未转义的设备字符串，失败时不显示旧设备数据。
+/** @brief 转义设备字段，避免设备信息被当作 HTML。 */
+function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+/** @brief 将后端系统猜测映射为视觉标签。 */
+function badge(os) { os = String(os || ''); if (/Windows/.test(os)) return ['win', 'Windows']; if (/Linux|Android|macOS/.test(os)) return ['lin', os]; if (/网络|路由/.test(os)) return ['net', '网络设备']; if (os.startsWith('ESP32')) return ['esp', 'ESP32-S3']; return ['unk', os || '未知']; }
+/** @brief 渲染单台设备，保留 IP、MAC、TTL、RTT 和发现方式。 */
+function row(v) { const [cls, label] = badge(v.os); return '<tr><td class="mono">' + escapeHtml(v.ip) + '</td><td class="mono">' + escapeHtml(v.mac) + '</td><td><span class="badge ' + cls + '" title="TTL ' + escapeHtml(v.ttl) + '">' + escapeHtml(label) + '</span></td><td class="mono">' + (v.ping ? escapeHtml(v.rtt_ms) + ' ms' : '—') + '</td><td class="dim">' + (v.ping ? 'ICMP' : 'ARP') + '</td></tr>'; }
+/** @brief 根据资源请求结果更新总连接状态，不使用假在线状态。 */
+function syncConnection() {
+  const online = $('systemStatus').textContent.startsWith('资源在线');
+  $('connection').dataset.state = online ? 'online' : 'offline';
+  $('connectionText').textContent = online ? '设备在线 · ' + location.hostname : '设备离线 · 等待重连';
+}
+/** @brief 请求一次扫描，失败时保留可再次操作的按钮。 */
+async function requestScan() {
+  $('scanButton').disabled = true;
+  try { const response = await fetch('/api/scan', { method: 'POST' }); if (!response.ok) throw new Error('扫描请求失败'); }
+  catch (e) { $('status').textContent = '扫描请求失败'; $('scanState').dataset.state = 'offline'; }
+  finally { $('scanButton').disabled = false; }
+}
+/** @brief 轮询设备结果，区分扫描中、无设备和连接失败。 */
+async function refresh() {
+  if (document.hidden) return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch('/api/devices', { cache: 'no-store', signal: controller.signal });
+    if (!response.ok) throw new Error('设备接口请求失败');
+    const j = await response.json();
+    $('rows').innerHTML = j.devices.map(row).join('');
+    $('empty').style.display = j.count ? 'none' : 'block';
+    $('emptyTitle').textContent = j.scanning ? '正在发现网络设备' : '暂未发现设备';
+    $('emptyHint').textContent = j.scanning ? '正在探测当前 /24 网段，请稍候' : '可重新扫描，或检查设备是否位于同一网段';
+    $('deviceCount').textContent = j.count;
+    $('status').textContent = j.scanning ? '扫描进行中' : '扫描就绪';
+    $('scanState').dataset.state = j.scanning ? 'scanning' : 'online';
+    $('scanButton').disabled = j.scanning;
+    $('sub').textContent = location.hostname + ' · /24 网段 · ' + j.count + ' 台设备';
+    if (!j.scanning && $('auto').checked) await requestScan();
+  } catch (e) {
+    $('rows').innerHTML = ''; $('deviceCount').textContent = '—'; $('empty').style.display = 'block';
+    $('emptyTitle').textContent = '无法连接设备'; $('emptyHint').textContent = '请检查网络连接，页面将自动重试';
+    $('status').textContent = '连接失败'; $('scanState').dataset.state = 'offline'; $('scanButton').disabled = false;
+  } finally { clearTimeout(timeout); }
+}
+// 灯光模块：保留颜色编辑与状态轮询的并发保护。
 let ledMode = 'off';
 let colorDirty = false;
 let ledRequestSerial = 0;
+let ledModeRequestSerial = 0;
+/** @brief 将 RGB 字节转换为十六进制颜色。 */
 function hexColor(r, g, b) { return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''); }
+/** @brief 读取颜色选择器的 RGB 值。 */
 function selectedRgb() { const hex = $('ledColor').value; return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)]; }
-function showColor(r, g, b) { $('ledColor').value = hexColor(r, g, b); $('rgbValue').textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')'; }
-async function setLed(mode) { const [r, g, b] = selectedRgb(); colorDirty = true; ++ledRequestSerial; const response = await fetch('/api/led?mode=' + mode + '&r=' + r + '&g=' + g + '&b=' + b, { method: 'POST' }); if (!response.ok) throw new Error('LED 控制请求失败'); await refreshLed(true); }
-async function refreshLed(syncColor = false) { if (colorDirty && !syncColor) return; const serial = ++ledRequestSerial; try { const j = await (await fetch('/api/led', { cache: 'no-store' })).json(); if (serial !== ledRequestSerial) return; const labels = { off: '关闭', on: '常亮', blink: '闪烁' }; ledMode = j.mode; $('ledStatus').textContent = labels[j.mode] || '未知'; if (!colorDirty || syncColor) { showColor(j.r, j.g, j.b); colorDirty = false; } document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === j.mode)); } catch (e) { $('ledStatus').textContent = '连接失败'; } }
-document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setLed(b.dataset.mode).catch(() => refreshLed(true))));
-$('ledColor').addEventListener('input', () => { colorDirty = true; ++ledRequestSerial; const [r, g, b] = selectedRgb(); $('rgbValue').textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')'; });
-$('ledColor').addEventListener('change', () => setLed(ledMode).catch(() => refreshLed(true)));
-fetch('/api/scan', { method: 'POST' }).catch(() => {}); refresh(); refreshLed(); setInterval(refresh, 2000); setInterval(refreshLed, 2000);
+/** @brief 同步颜色文字及灯光预览，仅开启状态显示光晕。 */
+function showColor(r, g, b) {
+  const hex = hexColor(r, g, b);
+  $('ledColor').value = hex; $('hexValue').textContent = hex.toUpperCase();
+  $('rgbValue').textContent = 'RGB(' + r + ', ' + g + ', ' + b + ')';
+  $('colorPreview').style.setProperty('--led-color', hex);
+  $('colorPreview').style.setProperty('--led-glow', ledMode === 'off' ? 'transparent' : hex + '80');
+}
+/** @brief 立即更新模式选中态，再异步提交设备请求以保证按钮跟手。 */
+function showLedMode(mode) {
+  const labels = { off: '已关闭', on: '常亮', blink: '闪烁' };
+  ledMode = mode;
+  $('ledStatus').textContent = labels[mode] || '未知';
+  $('ledState').dataset.state = 'pending';
+  document.querySelectorAll('[data-mode]').forEach(button => {
+    const active = button.dataset.mode === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  const [r, g, b] = selectedRgb();
+  $('colorPreview').style.setProperty('--led-glow', mode === 'off' ? 'transparent' : hexColor(r, g, b) + '80');
+}
+/** @brief 立即反馈模式选择，再提交设备；只有最新请求可以覆盖界面状态。 */
+async function setLed(mode) {
+  showLedMode(mode);
+  const requestSerial = ++ledModeRequestSerial;
+  const [r, g, b] = selectedRgb(); colorDirty = true; ++ledRequestSerial;
+  try {
+    const response = await fetch('/api/led?mode=' + mode + '&r=' + r + '&g=' + g + '&b=' + b, { method: 'POST' });
+    if (!response.ok) throw new Error('LED 控制请求失败');
+    if (requestSerial === ledModeRequestSerial) await refreshLed(true);
+  } catch (e) {
+    if (requestSerial !== ledModeRequestSerial) return;
+    colorDirty = false; $('ledStatus').textContent = '控制失败'; $('ledState').dataset.state = 'offline';
+  }
+}
+/** @brief 获取灯光状态，避免轮询覆盖正在编辑的颜色。 */
+async function refreshLed(syncColor = false) {
+  if ((document.hidden && !syncColor) || (colorDirty && !syncColor)) return;
+  const serial = ++ledRequestSerial;
+  try {
+    const response = await fetch('/api/led', { cache: 'no-store' });
+    if (!response.ok) throw new Error('灯光接口请求失败');
+    const j = await response.json(); if (serial !== ledRequestSerial) return;
+    const labels = { off: '已关闭', on: '常亮', blink: '闪烁' }; ledMode = j.mode;
+    $('ledStatus').textContent = labels[j.mode] || '未知'; $('ledState').dataset.state = 'online';
+    if (!colorDirty || syncColor) { showColor(j.r, j.g, j.b); colorDirty = false; }
+    document.querySelectorAll('[data-mode]').forEach(b => { const active = b.dataset.mode === j.mode; b.classList.toggle('active', active); b.setAttribute('aria-pressed', String(active)); });
+  } catch (e) { if (serial !== ledRequestSerial) return; if (syncColor) colorDirty = false; $('ledStatus').textContent = '连接失败'; $('ledState').dataset.state = 'offline'; }
+}
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setLed(b.dataset.mode)));
+$('scanButton').addEventListener('click', requestScan);
+$('ledColor').addEventListener('input', () => { colorDirty = true; ++ledRequestSerial; showColor(...selectedRgb()); });
+$('ledColor').addEventListener('change', () => setLed(ledMode));
+requestScan(); refresh(); refreshLed();
+// 使用完成后再调度的轮询，避免慢请求累积；页面隐藏时暂停网络和灯光请求。
+async function pollControls() { await Promise.all([refresh(), refreshLed()]); syncConnection(); setTimeout(pollControls, 2000); }
+setTimeout(pollControls, 2000);
+
 </script>
 </body>
 </html>
