@@ -26,9 +26,10 @@ tests/
   run_web_assets_tests.py HTML 文件发送主机测试入口
 data/
   index.html        首页 HTML、CSS 与 JavaScript，随 SPIFFS 镜像烧录
+  scanner.html      扫码页面，随 SPIFFS 镜像烧录
   wifi.json         真实凭据（已 gitignore，需自行创建）
   wifi.example.json 配置模板（复制为 wifi.json 并填写）
-partitions.csv      分区表：factory 2MB + storage(SPIFFS) 1MB
+partitions.csv      分区表：factory 3MiB + storage(SPIFFS) 1MiB（0x310000）
 ```
 
 ## JSON 依赖与离线测试
@@ -53,7 +54,7 @@ node --test tests/test_system_monitor_ui.cjs
 
 ## 首页文件与 SPIFFS
 
-首页源码位于 `data/index.html`，不再作为 C++ 字符串编入应用。`spiffs_create_partition_image(storage ../data FLASH_IN_PROJECT)` 将其与网络配置一起打包到 `storage.bin`，正常 `idf.py flash` 会烧录该镜像。
+首页源码位于 `data/index.html`，不再作为 C++ 字符串编入应用。`spiffs_create_partition_image(storage ../data FLASH_IN_PROJECT)` 将其与扫码页面 `data/scanner.html`、网络配置一起打包到 `storage.bin`，正常 `idf.py flash` 会烧录该镜像。
 
 启动配置加载时挂载 SPIFFS；HTTP 服务收到首页请求后打开 `/spiffs/index.html`，通过固定 1024 字节缓冲区调用 `httpd_resp_send_chunk()`，不会启动时加载或按请求复制整个页面。文件句柄在成功及失败路径均自动关闭。文件缺失返回 404，其他打开错误或首次读取失败返回 500；开始发送后读取或发送失败会终止连接，不补发正常结束块。
 
@@ -167,3 +168,31 @@ idf-driver\idf-driver-esp32-usb-jtag-2021-07-15\usb_jtag_debug_unit.inf
 
 
 > 标准头文件解析：项目已配置 `CompileFlags.BuiltinHeaders: QueryDriver`（需要支持该选项的 clangd）。配合 `--query-driver`，直接使用交叉编译器的内置头文件搜索路径；本项目已验证可在不设置个人绝对路径 `--resource-dir` 的情况下解析 `float.h`。这也避免本机 VS Code 启动参数丢失后再次出现同类误报。修改 `.clangd` 后，重启语言服务器并确认编辑器中的诊断；若仍有红线，应进一步检查具体文件及其编译命令。
+
+
+## HTTP 连接额度与 accept 错误
+
+`httpd_accept_conn: error in accept (23)` 对应当前 ESP-IDF/lwIP 的 `ENFILE`：无法从全局 socket 池分配新连接，不是 Flash 分区不足。两个 HTTP 服务的监听、控制 socket、客户端连接，以及局域网扫描等网络功能共用 `CONFIG_LWIP_MAX_SOCKETS`。
+
+当前全局额度为 20：首页服务客户端额度为 6，扫码服务为 4，均启用 `lru_purge_enable` 回收最久未使用的会话，监听队列为 4。`keep_alive_enable = false` 仅关闭 TCP keepalive 探测，不能据此认为 HTTP 持久连接会立即关闭。增加额度会增加运行内存需求；如果仍出现错误，应检查并发客户端、空闲会话及其他网络模块的 socket 生命周期，不能无限扩大。
+
+修改 `sdkconfig.defaults` 不会覆盖已有 `sdkconfig`，本次同步调整两者；需重新构建并烧录应用后生效。
+
+### 扫描任务的资源释放约束
+
+`runScan()` 必须正常返回，由 `scanTaskEntry()` 在返回后清除忙状态并调用 `vTaskDelete(nullptr)`。不得在持有 `SocketGuard` 或其他 C++ 局部资源的扫描函数中直接删除当前任务：任务删除不会展开 C++ 调用栈，导致 raw socket 和局部容器无法析构，每次扫描都会累积资源泄漏。提高 socket 上限不能代替此修复。
+
+
+## 扫码耗时与任务看门狗
+
+扫码服务在端口 81 串行处理 JPEG。上传限制为 1MiB、原图单边最大 4096 像素；浏览器和设备均保留原始分辨率，不再额外降采样，结果四角直接使用原图坐标。
+
+ZXing 恢复 `tryHarder` 增强识别，保留旋转、反色和库内部多尺度识别。先识别 QR 系列和一维条码；没有结果时继续识别 Aztec、DataMatrix、MaxiCode、PDF417。这样常见格式成功后不会继续进行无关的 DataMatrix 搜索。一次最多返回 4 个结果；同图混合常见格式与其他格式时，当前策略优先返回常见格式，不保证列出其他格式。
+
+解码作用域内将当前 HTTP 任务临时降至空闲优先级，利用当前 FreeRTOS 的抢占和同优先级时间片让 IDLE 任务运行，退出后恢复优先级。不关闭任务看门狗，也不通过降低识别精度掩盖耗时。日志报告原图尺寸及 JPEG、ZXing 分阶段耗时；响应包含 `decodeMs`、`scanMs`。
+
+浏览器等待上限为 60 秒，不再对失败请求自动重传。该等待上限不是服务端取消机制：浏览器超时不会中断正在执行的 ZXing，同一服务仍需等待当前识别返回；复杂图片仍需上板验证实际耗时。
+
+修改涉及固件及 `data/scanner.html`，必须重新构建并烧录应用与 `storage.bin`，仅更新应用不会更新页面。
+
+真实扫码回归测试：`python tests/run_barcode_decoder_tests.py`（需要主机 GCC、CMake、Ninja 和 Pillow）。测试编译实际 `BarcodeDecoder`、stb_image 与仓库中的 ZXing，使用两张项目样例验证 DataMatrix 内容 `G99367R01A`、原图尺寸、四角坐标、内存/文件输入及优先级恢复；不模拟识别结果。主机测试中的 FreeRTOS 是接口桩，不能替代设备端调度、耗时和看门狗验证。

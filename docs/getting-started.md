@@ -35,7 +35,7 @@ cmake --preset esp32s3
 cmake --build --preset esp32s3
 ```
 
-固件输出到 `build/esp32s3/esp32s3_app.bin`，SPIFFS 镜像为 `build/esp32s3/storage.bin`，包含首页 `data/index.html` 和配置文件。
+固件输出到 `build/esp32s3/esp32s3_app.bin`，SPIFFS 镜像为 `build/esp32s3/storage.bin`，包含首页 `data/index.html`、扫码页面 `data/scanner.html` 和配置文件。
 
 或在已初始化环境的 ESP-IDF PowerShell 终端中执行（注意指定构建目录为 preset 的 `build/esp32s3`）：
 
@@ -52,7 +52,7 @@ idf.py -B build/esp32s3 build
 idf.py -B build/esp32s3 flash monitor
 ```
 
-烧录包含 bootloader、分区表、`storage.bin`（index.html 和 wifi.json）、app 四部分。ESP32-S3 原生 USB 烧录后若停在 `waiting for download`，按一下 RST 复位即可。
+烧录包含 bootloader、分区表、`storage.bin`（index.html、scanner.html 和网络配置文件）、app 四部分。ESP32-S3 原生 USB 烧录后若停在 `waiting for download`，按一下 RST 复位即可。
 
 启动日志依次出现 `配置加载完成` → `正在连接 WiFi` → `HTTP 服务已启动` 后，浏览器访问：
 
@@ -60,8 +60,10 @@ idf.py -B build/esp32s3 flash monitor
 http://192.168.0.10/
 ```
 
-## 更新首页
+> 从旧的 2MiB 应用分区布局升级时，必须重新构建并完整烧录：当前 `factory` 为 3MiB，`storage` 起址为 `0x310000`。仅烧录应用不会更新分区表及迁移后的 SPIFFS 镜像，详见 [硬件与 Flash 分区](hardware-and-partitions.md)。
 
-修改 `data/index.html` 后重新构建并正常烧录，应用固件与 `storage.bin` 都需要更新；仅烧录应用分区不会更新页面。设备收到首页请求时从 SPIFFS 分块读取，不会在启动时加载整页。
+## 更新页面
+
+修改 `data/index.html` 或 `data/scanner.html` 后重新构建并正常烧录，应用固件与 `storage.bin` 都需要更新；仅烧录应用分区不会更新页面。设备收到首页请求时从 SPIFFS 分块读取，不会在启动时加载整页。
 
 > 正常烧录 SPIFFS 镜像会覆盖其中的原有文件，包括 `wifi.json`。已有 BLE 配置保存在 NVS 中，未擦除 NVS 时会在启动后恢复并同步；首次运行仍需准备自己的 `data/wifi.json`。

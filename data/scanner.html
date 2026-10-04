@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ESP32-S3 图片扫码</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#10151b;color:#e5edf5;font:15px/1.6 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px}a{color:#77cfff}h1{margin:10px 0}p{color:#a6b4c2}.controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:18px 0}button,input{font:inherit}button{padding:8px 14px;color:#e5edf5;background:#243341;border:1px solid #465565;border-radius:8px}button.primary{background:#137e58}button:disabled{opacity:.5}.images{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.panel{padding:12px;background:#18222b;border-radius:10px}.panel h2{font-size:16px;margin:0 0 8px}.image-box{display:flex;align-items:center;justify-content:center;min-height:220px;background:#050708;border-radius:8px;overflow:hidden}.image-box img{display:block;max-width:100%;max-height:520px;object-fit:contain}.status{min-height:2em;margin:14px 0;color:#76e8ac;overflow-wrap:anywhere}.hint{font-size:13px}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;margin-top:16px}th,td{text-align:left;border-bottom:1px solid #36414b;padding:10px;vertical-align:top}td:last-child{white-space:pre-wrap;overflow-wrap:anywhere;max-width:500px}td img{width:80px;height:80px;object-fit:contain;background:white}@media(max-width:650px){main{padding:14px}.images{grid-template-columns:1fr}}
+</style></head><body><main>
+<a id="home" href="#">← 设备控制台</a><h1>图片扫码</h1><p>上传一张包含二维码的图片 · ESP32-S3 解码 · 返回绿色定位框</p>
+<div class="controls"><input id="file" type="file" accept="image/jpeg,image/png,image/webp"><button id="scan" class="primary" disabled>开始识别</button><label><input id="flash" type="checkbox"> Flash 临时缓存</label></div>
+<p class="hint">服务端最多接受 1 MiB 的 JPEG，单边最多 4096 像素。PNG/WebP 会在浏览器中转换为 JPEG，但保留原图分辨率和比例，不裁剪、不缩放；设备按原始分辨率识别。</p>
+<div class="images"><section class="panel"><h2>上传图片</h2><div class="image-box"><img id="source" alt="待识别图片"></div></section><section class="panel"><h2>识别结果（绿色框）</h2><div class="image-box"><img id="result" alt="带二维码定位框的图片"></div></section></div>
+<div id="status" class="status" role="status">请选择一张图片</div><div id="stats"></div>
+<div class="controls"><strong>识别结果</strong><button id="export">导出 JSON</button><button id="clear">清空</button></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>二维码</th><th>类型</th><th>内容</th></tr></thead><tbody id="history"></tbody></table></div>
+</main><script>
+'use strict';
+const $ = id => document.getElementById(id), WIDTH = 640, HEIGHT = 480, MAX_BYTES = 1024 * 1024;
+const canvas = document.createElement('canvas'), overlay = document.createElement('canvas'); let imageWidth = WIDTH, imageHeight = HEIGHT; canvas.width = overlay.width = imageWidth; canvas.height = overlay.height = imageHeight;
+const ctx = canvas.getContext('2d'), overlayCtx = overlay.getContext('2d'); let selectedFile = null, frameId = 0, records = [];
+const home = new URL(location.href); home.port = '80'; home.pathname = '/'; home.search = ''; home.hash = ''; $('home').href = home.href;
+/** @brief 将用户选择的图片加载为浏览器图像对象。 */
+function loadImage(file) { return new Promise((resolve, reject) => { const image = new Image(); const url = URL.createObjectURL(file); image.onload = () => resolve({image, url}); image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片无法读取')); }; image.src = url; }); }
+/** @brief 按原始分辨率绘制到服务端画布，不裁剪、不缩放。 */
+async function prepareImage(file) { const loaded = await loadImage(file); const image = loaded.image; imageWidth = image.naturalWidth; imageHeight = image.naturalHeight; canvas.width = overlay.width = imageWidth; canvas.height = overlay.height = imageHeight; ctx.drawImage(image, 0, 0, imageWidth, imageHeight); URL.revokeObjectURL(loaded.url); }
+/** @brief 将画布编码成不超过 1 MiB 的 JPEG。 */
+async function encodeImage() { for (const quality of [.85,.7,.55,.4,.3,.2]) { const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality)); if (blob && blob.size <= MAX_BYTES) return blob; } throw new Error('图片压缩后仍超过 1 MiB，请选择更简单或更小的图片'); }
+/** @brief 校验服务端返回的二维码位置，避免使用越界坐标。 */
+function validCode(code) { return code && typeof code.format === 'string' && code.format.length <= 32 && typeof code.text === 'string' && code.text.length <= 16384 && Array.isArray(code.corners) && code.corners.length === 4 && code.corners.every(p => Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= imageWidth && p.y >= 0 && p.y <= imageHeight); }
+/** @brief 将识别结果画成绿色四边形并生成可下载的结果图片。 */
+function renderResult(codes) { overlayCtx.clearRect(0, 0, imageWidth, imageHeight); overlayCtx.strokeStyle = '#22ff66'; overlayCtx.lineWidth = 4; for (const code of codes) { overlayCtx.beginPath(); code.corners.forEach((p,i) => i ? overlayCtx.lineTo(p.x,p.y) : overlayCtx.moveTo(p.x,p.y)); overlayCtx.closePath(); overlayCtx.stroke(); } ctx.drawImage(overlay, 0, 0); $('result').src = canvas.toDataURL('image/jpeg', .9); }
+/** @brief 保存识别结果，使用文本节点防止二维码内容注入 HTML。 */
+function saveRecords(codes) { const now = new Date().toISOString(); for (const code of codes) { records.unshift({time:now,format:code.format,text:code.text,image:$('result').src}); } records = records.slice(0,100); renderHistory(); }
+/** @brief 渲染识别历史记录。 */
+function renderHistory() { const body=$('history'); body.replaceChildren(); for (const record of records) { const row=document.createElement('tr'); for (const value of [new Date(record.time).toLocaleString(),' ',record.format,record.text]) { const cell=document.createElement('td'); cell.textContent=value; row.appendChild(cell); } const image=document.createElement('img'); image.src=record.image; image.alt='二维码识别结果'; row.children[1].replaceChildren(image); body.appendChild(row); } }
+/** @brief 上传当前图片并校验帧编号、尺寸及响应结构。 */
+async function requestScan(blob, id, cache) {
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch('/api/barcode/scan?frameId='+id+'&cache='+cache, {method:'POST',headers:{'Content-Type':'image/jpeg'},body:blob,signal:controller.signal});
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || '服务端识别失败：'+response.status);
+    return result;
+  } finally { clearTimeout(timer); }
+}
+async function scanImage() { if (!selectedFile) return; $('scan').disabled=true; $('status').textContent='正在准备图片…'; const started=performance.now(); try { await prepareImage(selectedFile); const blob=await encodeImage(); const id=(++frameId)>>>0; const cache=$('flash').checked?'flash':'ram'; const result=await requestScan(blob,id,cache); imageWidth=result.width; imageHeight=result.height; if (result.frameId!==id || result.width<=0 || result.height<=0 || !Array.isArray(result.codes)) throw new Error('服务端响应图片或帧编号不匹配'); const codes=result.codes.filter(validCode).slice(0,4); renderResult(codes); saveRecords(codes); $('status').textContent=codes.length?'识别到 '+codes.length+' 个条码':'未识别到条码'; $('stats').textContent='上传 JPEG '+(blob.size/1024).toFixed(1)+' KiB · JPEG 解码 '+Number(result.decodeMs).toFixed(1)+' ms · ZXing 扫码 '+Number(result.scanMs).toFixed(1)+' ms · 总计 '+(performance.now()-started).toFixed(0)+' ms'; } catch (error) { $('status').textContent='识别失败：'+(error.name==='AbortError'?'请求超时；设备可能仍在处理，请稍后再试':error.message||String(error)); } finally { $('scan').disabled=!selectedFile; } }
+$('file').addEventListener('change', async event => { selectedFile=event.target.files[0]||null; $('result').removeAttribute('src'); $('stats').textContent=''; if (!selectedFile) { $('scan').disabled=true; $('source').removeAttribute('src'); $('status').textContent='请选择一张图片'; return; } try { const loaded=await loadImage(selectedFile); $('source').src=loaded.url; $('scan').disabled=false; $('status').textContent='图片已选择，点击“开始识别”'; } catch(error) { selectedFile=null; $('scan').disabled=true; $('status').textContent=error.message; } });
+$('scan').addEventListener('click', scanImage); $('clear').addEventListener('click',()=>{records=[];renderHistory();}); $('export').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(records,null,2)],{type:'application/json'})); const link=document.createElement('a'); link.href=url; link.download='扫码记录.json'; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);});
+</script></body></html>

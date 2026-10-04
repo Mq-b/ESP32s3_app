@@ -27,6 +27,12 @@
 
 ![ESP32-S3 开发板运行实拍：板载 RGB LED 点亮](images/board-led-on.jpg)
 
+### ESP32-S3 识别图片条码
+
+![ESP32-S3 识别图片条码](images/esp32-s3-barcode-web1.png)
+
+![ESP32-S3 识别图片条码](images/esp32-s3-barcode-web2.png)
+
 ## 怎么用
 
 1. 参照[首次运行指南](docs/getting-started.md)，准备配置并烧录固件。

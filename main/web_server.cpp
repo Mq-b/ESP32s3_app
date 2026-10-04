@@ -33,6 +33,7 @@ esp_err_t systemHandler(httpd_req_t *req) {
     const std::string json = monitor->statusJson();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Connection", "close");
     return httpd_resp_send(req, json.c_str(), json.size());
 }
 
@@ -41,6 +42,7 @@ esp_err_t devicesHandler(httpd_req_t *req) {
     std::string json = scanner->devicesJson();
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Connection", "close");
     httpd_resp_send(req, json.c_str(), json.size());
     return ESP_OK;
 }
@@ -108,6 +110,7 @@ esp_err_t ledStatusHandler(httpd_req_t *req) {
                                              {"r", color.red}, {"g", color.green},
                                              {"b", color.blue}};
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Connection", "close");
     return sendJsonResponse(req, response);
 }
 
@@ -149,6 +152,11 @@ void WebServer::start(const std::string &deviceIp) {
     config.server_port = 80;
     // JSON 构造和序列化需要额外栈空间，避免 HTTP 请求触发栈溢出。
     config.stack_size = 8192;
+    // 两个 HTTP 服务共享全局 socket 池，连接满时回收最久未使用的会话。
+    config.max_open_sockets = 6;
+    config.lru_purge_enable = true;
+    config.keep_alive_enable = false;
+    config.backlog_conn = 4;
 
     httpd_handle_t server = nullptr;
     ESP_ERROR_CHECK(httpd_start(&server, &config));

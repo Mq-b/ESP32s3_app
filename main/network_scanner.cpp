@@ -16,6 +16,7 @@
 #include <format>
 #include <nlohmann/json.hpp>
 #include <utility>
+#include <memory>
 
 static const char *TAG = "SCAN";
 
@@ -82,6 +83,17 @@ std::string ipToString(uint32_t ipHost) {
     return std::format("{}.{}.{}.{}", (ipHost >> 24) & 0xFF, (ipHost >> 16) & 0xFF,
                        (ipHost >> 8) & 0xFF, ipHost & 0xFF);
 }
+
+/**
+ * @brief 确保网络扫描任务的 raw socket 在异常和提前返回时关闭。
+ */
+struct SocketGuard {
+    int fd = -1;
+    explicit SocketGuard(int value) : fd(value) {}
+    ~SocketGuard() { if (fd >= 0) lwip_close(fd); }
+    SocketGuard(const SocketGuard &) = delete;
+    SocketGuard &operator=(const SocketGuard &) = delete;
+};
 
 std::string macToString(const uint8_t mac[6]) {
     return std::format("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", (unsigned)mac[0],
@@ -182,7 +194,11 @@ void NetworkScanner::startAsync() {
 }
 
 void NetworkScanner::scanTaskEntry(void *arg) {
-    static_cast<NetworkScanner *>(arg)->runScan();
+    auto *scanner = static_cast<NetworkScanner *>(arg);
+    // 先正常返回，确保 socket 和局部容器析构，再释放忙状态并删除任务。
+    scanner->runScan();
+    scanner->busy_ = false;
+    vTaskDelete(nullptr);
 }
 
 void NetworkScanner::runScan() {
@@ -190,18 +206,15 @@ void NetworkScanner::runScan() {
     esp_netif_ip_info_t ipInfo {};
     if (netif == nullptr || esp_netif_get_ip_info(netif, &ipInfo) != ESP_OK) {
         ESP_LOGE(TAG, "无 IP，扫描取消");
-        busy_ = false;
-        vTaskDelete(nullptr);
         return;
     }
     uint32_t selfHost = ntohl(ipInfo.ip.addr);
     uint32_t netBase = selfHost & 0xFFFFFF00;
 
-    int sock = lwip_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    SocketGuard socketGuard {lwip_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)};
+    int sock = socketGuard.fd;
     if (sock < 0) {
         ESP_LOGE(TAG, "raw socket 创建失败: %s", strerror(errno));
-        busy_ = false;
-        vTaskDelete(nullptr);
         return;
     }
 
@@ -230,7 +243,6 @@ void NetworkScanner::runScan() {
     while (static_cast<uint32_t>(esp_timer_get_time()) < deadline) {
         pingRecv(sock, found);
     }
-    lwip_close(sock);
     snapshotArp(found);
 
     // 本机自己也列出来
@@ -259,8 +271,6 @@ void NetworkScanner::runScan() {
     }
 
     ESP_LOGI(TAG, "%s", std::format("扫描完成，发现 {} 台设备", count).c_str());
-    busy_ = false;
-    vTaskDelete(nullptr);
 }
 
 std::vector<DeviceInfo> NetworkScanner::devices() const {
