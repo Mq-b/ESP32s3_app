@@ -1,4 +1,6 @@
 #include "esp_heap_caps.h"
+#include "barcode_runtime.h"
+#define STBI_JPEG_CHECKPOINT() barcode_runtime_poll()
 #include <stddef.h>
 
 /**

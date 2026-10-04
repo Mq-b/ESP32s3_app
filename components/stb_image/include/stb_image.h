@@ -2946,6 +2946,10 @@ static void stbi__jpeg_reset(stbi__jpeg *j)
    // since we don't even allow 1<<30 pixels
 }
 
+#ifndef STBI_JPEG_CHECKPOINT
+#define STBI_JPEG_CHECKPOINT() ((void)0)
+#endif
+
 static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
 {
    stbi__jpeg_reset(z);
@@ -2961,7 +2965,9 @@ static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
          int w = (z->img_comp[n].x+7) >> 3;
          int h = (z->img_comp[n].y+7) >> 3;
          for (j=0; j < h; ++j) {
+            STBI_JPEG_CHECKPOINT();
             for (i=0; i < w; ++i) {
+            STBI_JPEG_CHECKPOINT();
                int ha = z->img_comp[n].ha;
                if (!stbi__jpeg_decode_block(z, data, z->huff_dc+z->img_comp[n].hd, z->huff_ac+ha, z->fast_ac[ha], n, z->dequant[z->img_comp[n].tq])) return 0;
                z->idct_block_kernel(z->img_comp[n].data+z->img_comp[n].w2*j*8+i*8, z->img_comp[n].w2, data);
@@ -2980,14 +2986,19 @@ static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
          int i,j,k,x,y;
          STBI_SIMD_ALIGN(short, data[64]);
          for (j=0; j < z->img_mcu_y; ++j) {
+            STBI_JPEG_CHECKPOINT();
             for (i=0; i < z->img_mcu_x; ++i) {
+            STBI_JPEG_CHECKPOINT();
                // scan an interleaved mcu... process scan_n components in order
                for (k=0; k < z->scan_n; ++k) {
+            STBI_JPEG_CHECKPOINT();
                   int n = z->order[k];
                   // scan out an mcu's worth of this component; that's just determined
                   // by the basic H and V specified for the component
                   for (y=0; y < z->img_comp[n].v; ++y) {
+            STBI_JPEG_CHECKPOINT();
                      for (x=0; x < z->img_comp[n].h; ++x) {
+            STBI_JPEG_CHECKPOINT();
                         int x2 = (i*z->img_comp[n].h + x)*8;
                         int y2 = (j*z->img_comp[n].v + y)*8;
                         int ha = z->img_comp[n].ha;
@@ -3018,7 +3029,9 @@ static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
          int w = (z->img_comp[n].x+7) >> 3;
          int h = (z->img_comp[n].y+7) >> 3;
          for (j=0; j < h; ++j) {
+            STBI_JPEG_CHECKPOINT();
             for (i=0; i < w; ++i) {
+            STBI_JPEG_CHECKPOINT();
                short *data = z->img_comp[n].coeff + 64 * (i + j * z->img_comp[n].coeff_w);
                if (z->spec_start == 0) {
                   if (!stbi__jpeg_decode_block_prog_dc(z, data, &z->huff_dc[z->img_comp[n].hd], n))
@@ -3040,14 +3053,19 @@ static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
       } else { // interleaved
          int i,j,k,x,y;
          for (j=0; j < z->img_mcu_y; ++j) {
+            STBI_JPEG_CHECKPOINT();
             for (i=0; i < z->img_mcu_x; ++i) {
+            STBI_JPEG_CHECKPOINT();
                // scan an interleaved mcu... process scan_n components in order
                for (k=0; k < z->scan_n; ++k) {
+            STBI_JPEG_CHECKPOINT();
                   int n = z->order[k];
                   // scan out an mcu's worth of this component; that's just determined
                   // by the basic H and V specified for the component
                   for (y=0; y < z->img_comp[n].v; ++y) {
+            STBI_JPEG_CHECKPOINT();
                      for (x=0; x < z->img_comp[n].h; ++x) {
+            STBI_JPEG_CHECKPOINT();
                         int x2 = (i*z->img_comp[n].h + x);
                         int y2 = (j*z->img_comp[n].v + y);
                         short *data = z->img_comp[n].coeff + 64 * (x2 + y2 * z->img_comp[n].coeff_w);
@@ -3083,10 +3101,13 @@ static void stbi__jpeg_finish(stbi__jpeg *z)
       // dequantize and idct the data
       int i,j,n;
       for (n=0; n < z->s->img_n; ++n) {
+            STBI_JPEG_CHECKPOINT();
          int w = (z->img_comp[n].x+7) >> 3;
          int h = (z->img_comp[n].y+7) >> 3;
          for (j=0; j < h; ++j) {
+            STBI_JPEG_CHECKPOINT();
             for (i=0; i < w; ++i) {
+            STBI_JPEG_CHECKPOINT();
                short *data = z->img_comp[n].coeff + 64 * (i + j * z->img_comp[n].coeff_w);
                stbi__jpeg_dequantize(data, z->dequant[z->img_comp[n].tq]);
                z->idct_block_kernel(z->img_comp[n].data+z->img_comp[n].w2*j*8+i*8, z->img_comp[n].w2, data);
@@ -3133,6 +3154,7 @@ static int stbi__process_marker(stbi__jpeg *z, int m)
             int th = q & 15;
             if (tc > 1 || th > 3) return stbi__err("bad DHT header","Corrupt JPEG");
             for (i=0; i < 16; ++i) {
+            STBI_JPEG_CHECKPOINT();
                sizes[i] = stbi__get8(z->s);
                n += sizes[i];
             }
@@ -3208,6 +3230,7 @@ static int stbi__process_scan_header(stbi__jpeg *z)
    if (z->scan_n < 1 || z->scan_n > 4 || z->scan_n > (int) z->s->img_n) return stbi__err("bad SOS component count","Corrupt JPEG");
    if (Ls != 6+2*z->scan_n) return stbi__err("bad SOS len","Corrupt JPEG");
    for (i=0; i < z->scan_n; ++i) {
+            STBI_JPEG_CHECKPOINT();
       int id = stbi__get8(z->s), which;
       int q = stbi__get8(z->s);
       for (which = 0; which < z->s->img_n; ++which)
@@ -3243,6 +3266,7 @@ static int stbi__free_jpeg_components(stbi__jpeg *z, int ncomp, int why)
 {
    int i;
    for (i=0; i < ncomp; ++i) {
+            STBI_JPEG_CHECKPOINT();
       if (z->img_comp[i].raw_data) {
          STBI_FREE(z->img_comp[i].raw_data);
          z->img_comp[i].raw_data = NULL;
@@ -3275,6 +3299,7 @@ static int stbi__process_frame_header(stbi__jpeg *z, int scan)
    if (c != 3 && c != 1 && c != 4) return stbi__err("bad component count","Corrupt JPEG");
    s->img_n = c;
    for (i=0; i < c; ++i) {
+            STBI_JPEG_CHECKPOINT();
       z->img_comp[i].data = NULL;
       z->img_comp[i].linebuf = NULL;
    }
@@ -3283,6 +3308,7 @@ static int stbi__process_frame_header(stbi__jpeg *z, int scan)
 
    z->rgb = 0;
    for (i=0; i < s->img_n; ++i) {
+            STBI_JPEG_CHECKPOINT();
       static const unsigned char rgb[3] = { 'R', 'G', 'B' };
       z->img_comp[i].id = stbi__get8(s);
       if (s->img_n == 3 && z->img_comp[i].id == rgb[i])
@@ -3298,6 +3324,7 @@ static int stbi__process_frame_header(stbi__jpeg *z, int scan)
    if (!stbi__mad3sizes_valid(s->img_x, s->img_y, s->img_n, 0)) return stbi__err("too large", "Image too large to decode");
 
    for (i=0; i < s->img_n; ++i) {
+            STBI_JPEG_CHECKPOINT();
       if (z->img_comp[i].h > h_max) h_max = z->img_comp[i].h;
       if (z->img_comp[i].v > v_max) v_max = z->img_comp[i].v;
    }
@@ -3305,6 +3332,7 @@ static int stbi__process_frame_header(stbi__jpeg *z, int scan)
    // check that plane subsampling factors are integer ratios; our resamplers can't deal with fractional ratios
    // and I've never seen a non-corrupted JPEG file actually use them
    for (i=0; i < s->img_n; ++i) {
+            STBI_JPEG_CHECKPOINT();
       if (h_max % z->img_comp[i].h != 0) return stbi__err("bad H","Corrupt JPEG");
       if (v_max % z->img_comp[i].v != 0) return stbi__err("bad V","Corrupt JPEG");
    }
@@ -3319,6 +3347,7 @@ static int stbi__process_frame_header(stbi__jpeg *z, int scan)
    z->img_mcu_y = (s->img_y + z->img_mcu_h-1) / z->img_mcu_h;
 
    for (i=0; i < s->img_n; ++i) {
+            STBI_JPEG_CHECKPOINT();
       // number of effective pixels (e.g. for non-interleaved MCU)
       z->img_comp[i].x = (s->img_x * z->img_comp[i].h + h_max-1) / h_max;
       z->img_comp[i].y = (s->img_y * z->img_comp[i].v + v_max-1) / v_max;
@@ -3413,6 +3442,7 @@ static int stbi__decode_jpeg_image(stbi__jpeg *j)
 {
    int m;
    for (m = 0; m < 4; m++) {
+            STBI_JPEG_CHECKPOINT();
       j->img_comp[m].raw_data = NULL;
       j->img_comp[m].raw_coeff = NULL;
    }
@@ -3487,6 +3517,7 @@ static stbi_uc*  stbi__resample_row_h_2(stbi_uc *out, stbi_uc *in_near, stbi_uc 
    out[0] = input[0];
    out[1] = stbi__div4(input[0]*3 + input[1] + 2);
    for (i=1; i < w-1; ++i) {
+            STBI_JPEG_CHECKPOINT();
       int n = 3*input[i]+2;
       out[i*2+0] = stbi__div4(n+input[i-1]);
       out[i*2+1] = stbi__div4(n+input[i+1]);
@@ -3514,6 +3545,7 @@ static stbi_uc *stbi__resample_row_hv_2(stbi_uc *out, stbi_uc *in_near, stbi_uc 
    t1 = 3*in_near[0] + in_far[0];
    out[0] = stbi__div4(t1+2);
    for (i=1; i < w; ++i) {
+            STBI_JPEG_CHECKPOINT();
       t0 = t1;
       t1 = 3*in_near[i]+in_far[i];
       out[i*2-1] = stbi__div16(3*t0 + t1 + 8);
@@ -3542,6 +3574,7 @@ static stbi_uc *stbi__resample_row_hv_2_simd(stbi_uc *out, stbi_uc *in_near, stb
    // note we can't handle the last pixel in a row in this loop
    // because we need to handle the filter boundary conditions.
    for (; i < ((w-1) & ~7); i += 8) {
+            STBI_JPEG_CHECKPOINT();
 #if defined(STBI_SSE2)
       // load and perform the vertical filtering pass
       // this uses 3*x + y = 4*x + (y - x)
@@ -3630,6 +3663,7 @@ static stbi_uc *stbi__resample_row_hv_2_simd(stbi_uc *out, stbi_uc *in_near, stb
    out[i*2] = stbi__div16(3*t1 + t0 + 8);
 
    for (++i; i < w; ++i) {
+            STBI_JPEG_CHECKPOINT();
       t0 = t1;
       t1 = 3*in_near[i]+in_far[i];
       out[i*2-1] = stbi__div16(3*t0 + t1 + 8);
@@ -3661,6 +3695,7 @@ static void stbi__YCbCr_to_RGB_row(stbi_uc *out, const stbi_uc *y, const stbi_uc
 {
    int i;
    for (i=0; i < count; ++i) {
+            STBI_JPEG_CHECKPOINT();
       int y_fixed = (y[i] << 20) + (1<<19); // rounding
       int r,g,b;
       int cr = pcr[i] - 128;
@@ -3702,6 +3737,7 @@ static void stbi__YCbCr_to_RGB_simd(stbi_uc *out, stbi_uc const *y, stbi_uc cons
       __m128i xw = _mm_set1_epi16(255); // alpha channel
 
       for (; i+7 < count; i += 8) {
+            STBI_JPEG_CHECKPOINT();
          // load
          __m128i y_bytes = _mm_loadl_epi64((__m128i *) (y+i));
          __m128i cr_bytes = _mm_loadl_epi64((__m128i *) (pcr+i));
@@ -3759,6 +3795,7 @@ static void stbi__YCbCr_to_RGB_simd(stbi_uc *out, stbi_uc const *y, stbi_uc cons
       int16x8_t cb_const1 = vdupq_n_s16(   (short) ( 1.77200f*4096.0f+0.5f));
 
       for (; i+7 < count; i += 8) {
+            STBI_JPEG_CHECKPOINT();
          // load
          uint8x8_t y_bytes  = vld1_u8(y + i);
          uint8x8_t cr_bytes = vld1_u8(pcr + i);
@@ -3795,6 +3832,7 @@ static void stbi__YCbCr_to_RGB_simd(stbi_uc *out, stbi_uc const *y, stbi_uc cons
 #endif
 
    for (; i < count; ++i) {
+            STBI_JPEG_CHECKPOINT();
       int y_fixed = (y[i] << 20) + (1<<19); // rounding
       int r,g,b;
       int cr = pcr[i] - 128;
@@ -3897,6 +3935,7 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
       stbi__resample res_comp[4];
 
       for (k=0; k < decode_n; ++k) {
+            STBI_JPEG_CHECKPOINT();
          stbi__resample *r = &res_comp[k];
 
          // allocate line buffer big enough for upsampling off the edges
@@ -3924,8 +3963,10 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
 
       // now go ahead and resample
       for (j=0; j < z->s->img_y; ++j) {
+            STBI_JPEG_CHECKPOINT();
          stbi_uc *out = output + n * z->s->img_x * j;
          for (k=0; k < decode_n; ++k) {
+            STBI_JPEG_CHECKPOINT();
             stbi__resample *r = &res_comp[k];
             int y_bot = r->ystep >= (r->vs >> 1);
             coutput[k] = r->resample(z->img_comp[k].linebuf,
@@ -3944,6 +3985,7 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
             if (z->s->img_n == 3) {
                if (is_rgb) {
                   for (i=0; i < z->s->img_x; ++i) {
+            STBI_JPEG_CHECKPOINT();
                      out[0] = y[i];
                      out[1] = coutput[1][i];
                      out[2] = coutput[2][i];
@@ -3956,6 +3998,7 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
             } else if (z->s->img_n == 4) {
                if (z->app14_color_transform == 0) { // CMYK
                   for (i=0; i < z->s->img_x; ++i) {
+            STBI_JPEG_CHECKPOINT();
                      stbi_uc m = coutput[3][i];
                      out[0] = stbi__blinn_8x8(coutput[0][i], m);
                      out[1] = stbi__blinn_8x8(coutput[1][i], m);
@@ -3966,6 +4009,7 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
                } else if (z->app14_color_transform == 2) { // YCCK
                   z->YCbCr_to_RGB_kernel(out, y, coutput[1], coutput[2], z->s->img_x, n);
                   for (i=0; i < z->s->img_x; ++i) {
+            STBI_JPEG_CHECKPOINT();
                      stbi_uc m = coutput[3][i];
                      out[0] = stbi__blinn_8x8(255 - out[0], m);
                      out[1] = stbi__blinn_8x8(255 - out[1], m);
@@ -3977,6 +4021,7 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
                }
             } else
                for (i=0; i < z->s->img_x; ++i) {
+            STBI_JPEG_CHECKPOINT();
                   out[0] = out[1] = out[2] = y[i];
                   out[3] = 255; // not used if n==3
                   out += n;
@@ -3988,12 +4033,14 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
                      *out++ = stbi__compute_y(coutput[0][i], coutput[1][i], coutput[2][i]);
                else {
                   for (i=0; i < z->s->img_x; ++i, out += 2) {
+            STBI_JPEG_CHECKPOINT();
                      out[0] = stbi__compute_y(coutput[0][i], coutput[1][i], coutput[2][i]);
                      out[1] = 255;
                   }
                }
             } else if (z->s->img_n == 4 && z->app14_color_transform == 0) {
                for (i=0; i < z->s->img_x; ++i) {
+            STBI_JPEG_CHECKPOINT();
                   stbi_uc m = coutput[3][i];
                   stbi_uc r = stbi__blinn_8x8(coutput[0][i], m);
                   stbi_uc g = stbi__blinn_8x8(coutput[1][i], m);
@@ -4004,6 +4051,7 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
                }
             } else if (z->s->img_n == 4 && z->app14_color_transform == 2) {
                for (i=0; i < z->s->img_x; ++i) {
+            STBI_JPEG_CHECKPOINT();
                   out[0] = stbi__blinn_8x8(255 - coutput[0][i], coutput[3][i]);
                   out[1] = 255;
                   out += n;

@@ -1,3 +1,10 @@
+#ifdef ESP_PLATFORM
+#include "barcode_runtime.h"
+#define BARCODE_CHECKPOINT() barcode_runtime_poll()
+#else
+#define BARCODE_CHECKPOINT() ((void)0)
+#endif
+
 /*
 * Copyright 2016 Nu-book Inc.
 * Copyright 2016 ZXing authors
@@ -54,6 +61,7 @@ static void ThresholdBlock(const uint8_t* __restrict luminances, int xoffset, in
 						   BitMatrix& matrix)
 {
 	for (int y = yoffset; y < yoffset + BLOCK_SIZE; ++y) {
+        BARCODE_CHECKPOINT();
 		auto* src = luminances + y * rowStride + xoffset;
 		auto* const dstBegin = matrix.row(y).begin() + xoffset;
 		// TODO: fix pixelStride > 1 case
@@ -75,14 +83,18 @@ static Matrix<T_t> CalculateBlackPoints(const uint8_t* __restrict luminances, in
 	Matrix<T_t> blackPoints(subWidth, subHeight);
 
 	for (int y = 0; y < subHeight; y++) {
+        BARCODE_CHECKPOINT();
 		int yoffset = std::min(y * BLOCK_SIZE, height - BLOCK_SIZE);
 		for (int x = 0; x < subWidth; x++) {
+        BARCODE_CHECKPOINT();
 			int xoffset = std::min(x * BLOCK_SIZE, width - BLOCK_SIZE);
 			int sum = 0;
 			uint8_t min = luminances[yoffset * rowStride + xoffset];
 			uint8_t max = min;
 			for (int yy = 0, offset = yoffset * rowStride + xoffset; yy < BLOCK_SIZE; yy++, offset += rowStride) {
+        BARCODE_CHECKPOINT();
 				for (int xx = 0; xx < BLOCK_SIZE; xx++) {
+        BARCODE_CHECKPOINT();
 					auto pixel = luminances[offset + xx];
 					sum += pixel;
 					if (pixel < min)
@@ -94,7 +106,9 @@ static Matrix<T_t> CalculateBlackPoints(const uint8_t* __restrict luminances, in
 				if (max - min > MIN_DYNAMIC_RANGE) {
 					// finish the rest of the rows quickly
 					for (yy++, offset += rowStride; yy < BLOCK_SIZE; yy++, offset += rowStride) {
+        BARCODE_CHECKPOINT();
 						for (int xx = 0; xx < BLOCK_SIZE; xx++) {
+        BARCODE_CHECKPOINT();
 							sum += luminances[offset + xx];
 						}
 					}
@@ -149,14 +163,18 @@ static std::shared_ptr<BitMatrix> CalculateMatrix(const uint8_t* __restrict lumi
 #endif
 
 	for (int y = 0; y < subHeight; y++) {
+        BARCODE_CHECKPOINT();
 		int yoffset = std::min(y * BLOCK_SIZE, height - BLOCK_SIZE);
 		for (int x = 0; x < subWidth; x++) {
+        BARCODE_CHECKPOINT();
 			int xoffset = std::min(x * BLOCK_SIZE, width - BLOCK_SIZE);
 			int left = std::clamp(x, 2, subWidth - 3);
 			int top = std::clamp(y, 2, subHeight - 3);
 			int sum = 0;
 			for (int dy = -2; dy <= 2; ++dy) {
+        BARCODE_CHECKPOINT();
 				for (int dx = -2; dx <= 2; ++dx) {
+        BARCODE_CHECKPOINT();
 					sum += blackPoints(left + dx, top + dy);
 				}
 			}
@@ -166,6 +184,7 @@ static std::shared_ptr<BitMatrix> CalculateMatrix(const uint8_t* __restrict lumi
 #ifndef NDEBUG
 			for (int yy = 0; yy < 8; ++yy)
 				for (int xx = 0; xx < 8; ++xx) {
+        BARCODE_CHECKPOINT();
 					out.set(xoffset + xx, yoffset + yy, blackPoints(x, y));
 					out2.set(xoffset + xx, yoffset + yy, average);
 				}
@@ -197,12 +216,15 @@ static Matrix<T_t> BlockThresholds(const ImageView iv)
 	Matrix<T_t> thresholds(subWidth, subHeight);
 
 	for (int y = 0; y < subHeight; y++) {
+        BARCODE_CHECKPOINT();
 		int y0 = std::min(y * BLOCK_SIZE, iv.height() - BLOCK_SIZE);
 		for (int x = 0; x < subWidth; x++) {
+        BARCODE_CHECKPOINT();
 			int x0 = std::min(x * BLOCK_SIZE, iv.width() - BLOCK_SIZE);
 			uint8_t min = 255;
 			uint8_t max = 0;
 			for (int yy = 0; yy < BLOCK_SIZE; yy++) {
+        BARCODE_CHECKPOINT();
 				auto line = iv.data(x0, y0 + yy);
 				for (int xx = 0; xx < BLOCK_SIZE; xx++)
 					UpdateMinMax(min, max, line[xx]);
@@ -222,7 +244,9 @@ static Matrix<T_t> SmoothThresholds(Matrix<T_t>&& in)
 
 	constexpr int R = WINDOW_SIZE / BLOCK_SIZE / 2;
 	for (int y = 0; y < in.height(); y++) {
+        BARCODE_CHECKPOINT();
 		for (int x = 0; x < in.width(); x++) {
+        BARCODE_CHECKPOINT();
 			int left = std::clamp(x, R, in.width() - R - 1);
 			int top = std::clamp(y, R, in.height() - R - 1);
 
@@ -245,6 +269,7 @@ static Matrix<T_t> SmoothThresholds(Matrix<T_t>&& in)
 	// flood fill any remaing gaps of (very large) no-contrast regions
 	auto last = out.begin() - 1;
 	for (auto* i = out.begin(); i != out.end(); ++i) {
+        BARCODE_CHECKPOINT();
 		if (*i) {
 			if (last != i - 1)
 				std::fill(last + 1, i, *i);
@@ -265,8 +290,10 @@ static std::shared_ptr<BitMatrix> ThresholdImage(const ImageView iv, const Matri
 #endif
 
 	for (int y = 0; y < thresholds.height(); y++) {
+        BARCODE_CHECKPOINT();
 		int yoffset = std::min(y * BLOCK_SIZE, iv.height() - BLOCK_SIZE);
 		for (int x = 0; x < thresholds.width(); x++) {
+        BARCODE_CHECKPOINT();
 			int xoffset = std::min(x * BLOCK_SIZE, iv.width() - BLOCK_SIZE);
 			ThresholdBlock(iv.data(), xoffset, yoffset, thresholds(x, y), iv.rowStride(), *matrix);
 

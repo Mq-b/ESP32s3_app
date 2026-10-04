@@ -8,6 +8,9 @@
 #pragma once
 
 #include "Matrix.h"
+#ifdef ESP_PLATFORM
+#include "barcode_runtime.h"
+#endif
 #include "Point.h"
 #include "Range.h"
 
@@ -37,6 +40,11 @@ class BitMatrix
 
 	const data_t& get(int i) const
 	{
+#ifdef ESP_PLATFORM
+        // 串行解码任务每 4096 次像素访问检查一次让出预算。
+        static unsigned accesses = 0;
+        if ((++accesses & 4095U) == 0) barcode_runtime_checkpoint();
+#endif
 #if 1
 		return _bits.at(i);
 #else

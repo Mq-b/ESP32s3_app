@@ -1,5 +1,5 @@
 #include "barcode_scan_server.h"
-#include "barcode_decoder.h"
+#include "barcode_worker.h"
 #include "web_assets.h"
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
@@ -119,8 +119,11 @@ esp_err_t scanHandler(httpd_req_t *req) {
             file.handle = nullptr;
             if (closed != 0) return fail(req, "507 Insufficient Storage", "Flash 缓存关闭失败");
         }
-        const auto result = BarcodeDecoder::scan(bytes.get(), received, flash ? CACHE_PATH : nullptr,
-                                                static_cast<uint32_t>(id));
+        BarcodeScanResult result;
+        if (BarcodeWorker::scan(bytes.get(), received, flash ? CACHE_PATH : nullptr,
+                                static_cast<uint32_t>(id), result) != ESP_OK)
+            return fail(req, "503 Service Unavailable", "解码任务不可用或队列已满");
+        if (result.json.empty()) return fail(req, "503 Service Unavailable", "解码结果内存不足");
         const char *status = result.httpStatus == 200 ? "200 OK" : result.httpStatus == 400 ? "400 Bad Request" :
                              result.httpStatus == 503 ? "503 Service Unavailable" : "422 Unprocessable Content";
         httpd_resp_set_status(req, status);
@@ -135,10 +138,13 @@ esp_err_t scanHandler(httpd_req_t *req) {
 }  // namespace
 
 esp_err_t BarcodeScanServer::start() {
+    const esp_err_t workerResult = BarcodeWorker::start();
+    if (workerResult != ESP_OK) return workerResult;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 81;
     config.ctrl_port = 32769;
-    config.stack_size = 24 * 1024;
+    config.core_id = 0;
+    config.stack_size = 8192;
     config.max_uri_handlers = 2;
     // 两个 HTTP 服务共享全局 socket 池，连接满时回收最久未使用的会话。
     config.max_open_sockets = 4;

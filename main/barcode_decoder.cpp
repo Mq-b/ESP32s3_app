@@ -6,8 +6,7 @@
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "barcode_runtime.h"
 #include "stb_image.h"
 #include <memory>
 #include <new>
@@ -19,22 +18,15 @@ constexpr size_t MAX_JPEG_BYTES = 1024 * 1024;
 constexpr int MAX_IMAGE_DIMENSION = 4096;
 constexpr const char *TAG = "BARCODE";
 
-/**
- * @brief 解码期间临时降低当前任务优先级，让同核空闲任务获得时间片。
- * @note 当前 FreeRTOS 启用抢占与同优先级时间片；作用域结束后恢复原优先级。
- */
-class DecodePriorityGuard {
+/** @brief 管理当前解码任务的协作调度作用域，不降低任务优先级。 */
+class DecodeScheduleGuard {
 public:
-    /** @brief 保存当前任务优先级，并降至空闲优先级。 */
-    DecodePriorityGuard() : priority_(uxTaskPriorityGet(nullptr)) {
-        vTaskPrioritySet(nullptr, tskIDLE_PRIORITY);
-    }
-    /** @brief 恢复当前任务进入解码前的优先级。 */
-    ~DecodePriorityGuard() { vTaskPrioritySet(nullptr, priority_); }
-    DecodePriorityGuard(const DecodePriorityGuard &) = delete;
-    DecodePriorityGuard &operator=(const DecodePriorityGuard &) = delete;
-private:
-    UBaseType_t priority_;
+    /** @brief 开始协作调度计时。 */
+    DecodeScheduleGuard() { barcode_runtime_begin(); }
+    /** @brief 结束计时并输出让出统计。 */
+    ~DecodeScheduleGuard() { barcode_runtime_end(); }
+    DecodeScheduleGuard(const DecodeScheduleGuard &) = delete;
+    DecodeScheduleGuard &operator=(const DecodeScheduleGuard &) = delete;
 };
 
 /** @brief 替换不可信码文本中的非法 UTF-8，避免序列化异常。 */
@@ -60,7 +52,7 @@ BarcodeScanResult BarcodeDecoder::scan(const uint8_t *data, size_t size, const c
             (channels != 1 && channels != 3))
             return error(400, frameId, "仅接受单边不超过 4096 像素的灰度或 RGB JPEG");
 
-        DecodePriorityGuard priorityGuard;
+        DecodeScheduleGuard scheduleGuard;
         // 原始灰度图直接交给 ZXing，不做额外采样，保留小条码细节。
         using ImagePtr = std::unique_ptr<stbi_uc, decltype(&stbi_image_free)>;
         ImagePtr image(path ? stbi_load(path, &width, &height, &channels, 1)

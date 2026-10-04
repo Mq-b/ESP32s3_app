@@ -1,3 +1,10 @@
+#ifdef ESP_PLATFORM
+#include "barcode_runtime.h"
+#define BARCODE_CHECKPOINT() barcode_runtime_poll()
+#else
+#define BARCODE_CHECKPOINT() ((void)0)
+#endif
+
 /*
 * Copyright 2019 Axel Waggershauser
 */
@@ -61,6 +68,7 @@ class LumImagePyramid
 
 		for (int dy = 0; dy < div.height(); ++dy)
 			for (int dx = 0; dx < div.width(); ++dx) {
+        BARCODE_CHECKPOINT();
 				int sum = (N * N) / 2;
 				for (int ty = 0; ty < N; ++ty)
 					for (int tx = 0; tx < N; ++tx)
@@ -173,17 +181,21 @@ Barcodes ReadBarcodes(const ImageView& _iv, const ReaderOptions& opts)
 	Barcodes res;
 	int maxSymbols = opts.maxNumberOfSymbols() ? opts.maxNumberOfSymbols() : INT_MAX;
 	for (auto&& iv : pyramid.layers) {
+        BARCODE_CHECKPOINT();
 		auto bitmap = CreateBitmap(opts.binarizer(), iv);
 		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
+        BARCODE_CHECKPOINT();
 			if (close)
 				bitmap->close();
 
 			// TODO: check if closing after invert would be beneficial
 			for (int invert = 0; invert <= static_cast<int>(opts.tryInvert() && !close); ++invert) {
+        BARCODE_CHECKPOINT();
 				if (invert)
 					bitmap->invert();
 				auto rs = (close ? *closedReader : reader).readMultiple(*bitmap, maxSymbols);
 				for (auto& r : rs) {
+        BARCODE_CHECKPOINT();
 					if (iv.width() != _iv.width())
 						r.setPosition(Scale(r.position(), _iv.width() / iv.width()));
 					if (!Contains(res, r)) {

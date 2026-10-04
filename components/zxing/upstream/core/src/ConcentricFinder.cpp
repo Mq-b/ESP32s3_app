@@ -1,3 +1,10 @@
+#ifdef ESP_PLATFORM
+#include "barcode_runtime.h"
+#define BARCODE_CHECKPOINT() barcode_runtime_poll()
+#else
+#define BARCODE_CHECKPOINT() ((void)0)
+#endif
+
 /*
 * Copyright 2020 Axel Waggershauser
 */
@@ -15,6 +22,7 @@ std::optional<PointF> AverageEdgePixels(BitMatrixCursorI cur, int range, int num
 {
 	PointF sum = {};
 	for (int i = 0; i < numOfEdges; ++i) {
+        BARCODE_CHECKPOINT();
 		if (!cur.isIn())
 			return {};
 		cur.stepToEdge(1, range);
@@ -28,6 +36,7 @@ std::optional<PointF> CenterOfDoubleCross(const BitMatrix& image, PointI center,
 {
 	PointF sum = {};
 	for (auto d : {PointI{0, 1}, {1, 0}, {1, 1}, {1, -1}}) {
+        BARCODE_CHECKPOINT();
 		auto avr1 = AverageEdgePixels({image, center,  d}, range, numOfEdges);
 		auto avr2 = AverageEdgePixels({image, center, -d}, range, numOfEdges);
 		if (!avr1 || !avr2)
@@ -74,6 +83,7 @@ std::optional<PointF> CenterOfRing(const BitMatrix& image, PointI center, int ra
 	PointF sum = {};
 	int n = 0;
 	do {
+        BARCODE_CHECKPOINT();
 		log(cur.p, 4);
 		sum += centered(cur.p);
 		++n;
@@ -100,6 +110,7 @@ std::optional<PointF> CenterOfRings(const BitMatrix& image, PointF center, int r
 	int n = 1;
 	PointF sum = center;
 	for (int i = 2; i < numOfRings + 1; ++i) {
+        BARCODE_CHECKPOINT();
 		auto c = CenterOfRing(image, PointI(center), range, i);
 		if (!c) {
 			if (n == 1)
@@ -132,6 +143,7 @@ static std::vector<PointF> CollectRingPoints(const BitMatrix& image, PointF cent
 	points.reserve(4 * range);
 
 	do {
+        BARCODE_CHECKPOINT();
 		log(cur.p, 4);
 		points.push_back(centered(cur.p));
 
@@ -181,6 +193,7 @@ static std::optional<QuadrilateralF> FitQadrilateralToPoints(PointF center, std:
 	// check if all points belonging to each line segment are sufficiently close to that line
 	for (int i = 0; i < 4; ++i)
 		for (const PointF* p = beg[i]; p != end[i]; ++p) {
+        BARCODE_CHECKPOINT();
 			auto len = std::distance(beg[i], end[i]);
 			if (len > 3 && lines[i].distance(*p) > std::max(1., std::min(8., len / 8.))) {
 #ifdef PRINT_DEBUG

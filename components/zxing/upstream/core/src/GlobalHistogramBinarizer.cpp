@@ -1,3 +1,10 @@
+#ifdef ESP_PLATFORM
+#include "barcode_runtime.h"
+#define BARCODE_CHECKPOINT() barcode_runtime_poll()
+#else
+#define BARCODE_CHECKPOINT() ((void)0)
+#endif
+
 /*
 * Copyright 2016 Nu-book Inc.
 * Copyright 2016 ZXing authors
@@ -67,6 +74,7 @@ static int EstimateBlackPoint(const Histogram& buckets)
 	int secondPeak = 0;
 	int secondPeakScore = 0;
 	for (int x = 0; x < Size(buckets); x++) {
+        BARCODE_CHECKPOINT();
 		int distanceToBiggest = x - firstPeak;
 		// Encourage more distant second peaks by multiplying by square of distance.
 		int score = buckets[x] * distanceToBiggest * distanceToBiggest;
@@ -91,6 +99,7 @@ static int EstimateBlackPoint(const Histogram& buckets)
 	int bestValley = secondPeak - 1;
 	int bestValleyScore = -1;
 	for (int x = secondPeak - 1; x > firstPeak; x--) {
+        BARCODE_CHECKPOINT();
 		int fromFirst = x - firstPeak;
 		int score = fromFirst * fromFirst * (secondPeak - x) * (maxBucketCount - buckets[x]);
 		if (score > bestValleyScore) {
@@ -147,6 +156,7 @@ GlobalHistogramBinarizer::getBlackMatrix() const
 	Histogram localBuckets = {};
 	{
 		for (int y = 1; y < 5; y++) {
+        BARCODE_CHECKPOINT();
 			int row = height() * y / 5;
 			const uint8_t* luminances = _buffer.data(0, row);
 			int right = (width() * 4) / 5;

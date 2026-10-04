@@ -1,3 +1,10 @@
+#ifdef ESP_PLATFORM
+#include "barcode_runtime.h"
+#define BARCODE_CHECKPOINT() barcode_runtime_poll()
+#else
+#define BARCODE_CHECKPOINT() ((void)0)
+#endif
+
 /*
 * Copyright 2016 Nu-book Inc.
 * Copyright 2016 ZXing authors
@@ -86,6 +93,7 @@ static ResultPointsAndTransitions TransitionsBetween(const BitMatrix& image, con
 	int transitions = 0;
 	bool inBlack = image.get(steep ? fromY : fromX, steep ? fromX : fromY);
 	for (int x = fromX, y = fromY; x != toX; x += xstep) {
+        BARCODE_CHECKPOINT();
 		bool isBlack = image.get(steep ? y : x, steep ? x : y);
 		if (isBlack != inBlack) {
 			transitions++;
@@ -292,6 +300,7 @@ static DetectorResult DetectOld(const BitMatrix& image)
 	const ResultPoint* bottomLeft = nullptr;
 	const ResultPoint* topLeft = nullptr;
 	for (const auto& [point, count] : pointCount) {
+        BARCODE_CHECKPOINT();
 		if (count == 2) {
 			bottomLeft = point; // this is definitely the bottom left, then -- end of two L sides
 		}
@@ -449,6 +458,7 @@ public:
 		double sumFront = distance(beg, project(_points.front())) - unitPixelDist;
 		double sumBack = 0; // (last black pixel to last black pixel)
 		for (auto dist : gapSizes) {
+        BARCODE_CHECKPOINT();
 			if (dist > 1.9 * unitPixelDist)
 				modSizes.push_back(std::exchange(sumBack, 0.0));
 			sumFront += dist;
@@ -471,6 +481,7 @@ public:
 
 		if (*iMax > 2 * *iMin) {
 			for (int i = 1; i < Size(modSizes) - 2; ++i) {
+        BARCODE_CHECKPOINT();
 				if (modSizes[i] > 0 && modSizes[i] + modSizes[i + 2] < meanModSize * 1.4)
 					modSizes[i] += std::exchange(modSizes[i + 2], 0);
 				else if (modSizes[i] > meanModSize * 1.6)
@@ -495,6 +506,7 @@ public:
 		auto maxP = _points.begin();
 		double maxD = 0.0;
 		for (auto p = _points.begin(); p != _points.end(); ++p) {
+        BARCODE_CHECKPOINT();
 			auto d = lineAB.distance(*p);
 			if (d > maxD) {
 				maxP = p;
@@ -532,6 +544,7 @@ class EdgeTracer : public BitMatrixCursorF
 		for (int breadth = 1; breadth <= (maxStepSize == 1 ? 2 : (goodDirection ? 1 : 3)); ++breadth)
 			for (int step = 1; step <= maxStepSize; ++step)
 				for (int i = 0; i <= 2*(step/4+1) * breadth; ++i) {
+        BARCODE_CHECKPOINT();
 					auto pEdge = p + step * d + (i&1 ? (i+1)/2 : -i/2) * dEdge;
 					log(pEdge);
 
@@ -540,6 +553,7 @@ class EdgeTracer : public BitMatrixCursorF
 
 					// found black pixel -> go 'outward' until we hit the b/w border
 					for (int j = 0; j < std::max(maxStepSize, 3) && isIn(pEdge); ++j) {
+        BARCODE_CHECKPOINT();
 						if (whiteAt(pEdge)) {
 							// if we are not making any progress, we still have another endless loop bug
 							assert(p != centered(pEdge));
@@ -600,6 +614,7 @@ public:
 	{
 		line.setDirectionInward(dEdge);
 		do {
+        BARCODE_CHECKPOINT();
 			log(p);
 			line.add(p);
 			if (line.points().size() % 50 == 10 && !updateDirectionFromLineCentroid(line))
@@ -616,6 +631,7 @@ public:
 		int gaps = 0, steps = 0, maxStepsPerGap = maxStepSize;
 		PointF lastP;
 		do {
+        BARCODE_CHECKPOINT();
 			// detect an endless loop (lack of progress). if encountered, please report.
 			// this fixes a deadlock in falsepositives-1/#570.png and the regression in #574
 			if (p == std::exchange(lastP, p) || steps++ > (gaps == 0 ? 2 : gaps + 1) * maxStepsPerGap)
@@ -720,6 +736,7 @@ public:
 static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines)
 {
 	while (startTracer.moveToNextWhiteAfterBlack()) {
+        BARCODE_CHECKPOINT();
 		log(startTracer.p);
 
 		PointF tl, bl, br, tr;
@@ -881,12 +898,14 @@ static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tr
 	constexpr int minSymbolSize = 8 * 2; // minimum realistic size in pixel: 8 modules x 2 pixels per module
 
 	for (auto dir : {PointF{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) {
+        BARCODE_CHECKPOINT();
 		auto center = PointI(image.width() / 2, image.height() / 2);
 		auto startPos = centered(center - center * dir + minSymbolSize / 2 * dir);
 
 		history.clear();
 
 		for (int i = 1;; ++i) {
+        BARCODE_CHECKPOINT();
 			EdgeTracer tracer(image, startPos, dir);
 			tracer.p += i / 2 * minSymbolSize * (i & 1 ? -1 : 1) * tracer.right();
 			if (tryHarder)
@@ -967,6 +986,7 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 	else if (!isPure) { // If r.isValid() then there is no point in looking for more (no-pure) symbols
 		bool found = false;
 		for (auto&& r : DetectNew(image, tryHarder, tryRotate)) {
+        BARCODE_CHECKPOINT();
 			found = true;
 			co_yield std::move(r);
 		}
