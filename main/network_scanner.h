@@ -10,12 +10,12 @@
  * @brief 单台设备的扫描结果
  */
 struct DeviceInfo {
-    uint32_t ipHost{};    // IP（人类序：192 为最高字节）
-    uint8_t mac[6]{};     // MAC 地址
-    uint8_t ttl{};        // echo 回复中的 TTL（用于猜测系统）
-    uint32_t rttUs{};     // 往返延迟（微秒）
-    bool viaPing{};       // true=响应 ICMP；false=仅 ARP 可见
-    std::string osGuess;  // 按 TTL 猜测的系统
+    uint32_t ipHost{};   // IP（人类序：192 为最高字节）
+    uint8_t mac[6]{};    // MAC 地址
+    uint8_t ttl{};       // echo 回复中的 TTL（用于猜测系统）
+    uint32_t rttUs{};    // 往返延迟（微秒）
+    bool viaPing{};      // true=响应 ICMP；false=仅 ARP 可见
+    std::string osGuess; // 按 TTL 猜测的系统
 };
 
 /**

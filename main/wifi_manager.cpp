@@ -38,13 +38,15 @@ void applyStaticIp(esp_netif_t *netif, const AppConfig &config) {
     esp_netif_ip_info_t ipInfo{};
     ESP_ERROR_CHECK(esp_netif_str_to_ip4(config.staticIp.c_str(), &ipInfo.ip));
     ESP_ERROR_CHECK(esp_netif_str_to_ip4(config.gateway.c_str(), &ipInfo.gw));
-    ESP_ERROR_CHECK(esp_netif_str_to_ip4(config.netmask.c_str(), &ipInfo.netmask));
+    ESP_ERROR_CHECK(
+        esp_netif_str_to_ip4(config.netmask.c_str(), &ipInfo.netmask));
     ESP_ERROR_CHECK(esp_netif_set_ip_info(netif, &ipInfo));
 
-    ESP_LOGI(TAG, "固定 IP: %s 网关: %s", config.staticIp.c_str(), config.gateway.c_str());
+    ESP_LOGI(TAG, "固定 IP: %s 网关: %s", config.staticIp.c_str(),
+             config.gateway.c_str());
 }
 
-}  // namespace
+} // namespace
 
 void WiFiManager::start() {
     const AppConfig &config = config_;
@@ -58,10 +60,10 @@ void WiFiManager::start() {
     wifi_init_config_t initCfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&initCfg));
 
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                                        onWifiEvent, nullptr, nullptr));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                                        onWifiEvent, nullptr, nullptr));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        WIFI_EVENT, ESP_EVENT_ANY_ID, onWifiEvent, nullptr, nullptr));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+        IP_EVENT, IP_EVENT_STA_GOT_IP, onWifiEvent, nullptr, nullptr));
 
     if (config.ssid.empty()) {
         ESP_LOGW(TAG, "尚未配置 WiFi，保留蓝牙配网服务等待设置");
@@ -69,11 +71,12 @@ void WiFiManager::start() {
     }
 
     wifi_config_t wifiCfg{};
-    std::strncpy(reinterpret_cast<char *>(wifiCfg.sta.ssid), config.ssid.c_str(),
-                 sizeof(wifiCfg.sta.ssid));
-    std::strncpy(reinterpret_cast<char *>(wifiCfg.sta.password), config.password.c_str(),
-                 sizeof(wifiCfg.sta.password));
-    wifiCfg.sta.threshold.authmode = config.password.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
+    std::strncpy(reinterpret_cast<char *>(wifiCfg.sta.ssid),
+                 config.ssid.c_str(), sizeof(wifiCfg.sta.ssid));
+    std::strncpy(reinterpret_cast<char *>(wifiCfg.sta.password),
+                 config.password.c_str(), sizeof(wifiCfg.sta.password));
+    wifiCfg.sta.threshold.authmode =
+        config.password.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifiCfg));

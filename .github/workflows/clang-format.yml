@@ -1,0 +1,62 @@
+name: Check main code formatting
+
+on:
+  push:
+    paths:
+      - "main/**/*.c"
+      - "main/**/*.cc"
+      - "main/**/*.cpp"
+      - "main/**/*.cxx"
+      - "main/**/*.h"
+      - "main/**/*.hh"
+      - "main/**/*.hpp"
+      - ".clang-format"
+      - ".github/workflows/clang-format.yml"
+  pull_request:
+    paths:
+      - "main/**/*.c"
+      - "main/**/*.cc"
+      - "main/**/*.cpp"
+      - "main/**/*.cxx"
+      - "main/**/*.h"
+      - "main/**/*.hh"
+      - "main/**/*.hpp"
+      - ".clang-format"
+      - ".github/workflows/clang-format.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  clang-format:
+    name: Check clang-format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        uses: aminya/setup-cpp@v1
+        with:
+          clangtidy: false
+          clangformat: true
+          vcvarsall: false
+
+      - name: Check formatting in main
+        shell: pwsh
+        run: |
+          $extensions = @('.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp')
+          $files = @(Get-ChildItem -Path main -Recurse -File |
+              Where-Object { $extensions -contains $_.Extension } |
+              Select-Object -ExpandProperty FullName)
+
+          if ($files.Count -eq 0) {
+              Write-Host 'No C/C++ source files found in the main directory.'
+              exit 0
+          }
+
+          & clang-format --dry-run --Werror $files
+          if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+          }

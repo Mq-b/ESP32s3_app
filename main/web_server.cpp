@@ -53,7 +53,8 @@ esp_err_t devicesHandler(httpd_req_t *req) {
  * @param body 待发送的 JSON 值，字符串必须为合法 UTF-8。
  * @return HTTP 响应发送结果。
  */
-esp_err_t sendJsonResponse(httpd_req_t *req, const nlohmann::ordered_json &body) {
+esp_err_t sendJsonResponse(httpd_req_t *req,
+                           const nlohmann::ordered_json &body) {
     const std::string response = body.dump();
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, response.c_str(), response.size());
@@ -99,15 +100,18 @@ bool readRequestedColor(const char *query, Ws2812Color &color) {
     if (!hasRed && !hasGreen && !hasBlue) {
         return true;
     }
-    return hasRed && hasGreen && hasBlue && readColorParameter(query, "r", color.red) &&
-           readColorParameter(query, "g", color.green) && readColorParameter(query, "b", color.blue);
+    return hasRed && hasGreen && hasBlue &&
+           readColorParameter(query, "r", color.red) &&
+           readColorParameter(query, "g", color.green) &&
+           readColorParameter(query, "b", color.blue);
 }
 
 esp_err_t ledStatusHandler(httpd_req_t *req) {
     auto *led = static_cast<Ws2812Controller *>(req->user_ctx);
     const Ws2812Color color = led->color();
     const nlohmann::ordered_json response = {{"mode", ledModeName(led->mode())},
-                                             {"r", color.red}, {"g", color.green},
+                                             {"r", color.red},
+                                             {"g", color.green},
                                              {"b", color.blue}};
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_set_hdr(req, "Connection", "close");
@@ -126,7 +130,8 @@ esp_err_t ledControlHandler(httpd_req_t *req) {
 
     Ws2812Color color = led->color();
     if (!readRequestedColor(query, color)) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "RGB 参数必须为 0 至 255 的整数");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                            "RGB 参数必须为 0 至 255 的整数");
         return ESP_FAIL;
     }
     led->setColor(color);
@@ -145,7 +150,7 @@ esp_err_t ledControlHandler(httpd_req_t *req) {
     return sendJsonResponse(req, {{"ok", true}});
 }
 
-}  // namespace
+} // namespace
 
 void WebServer::start(const std::string &deviceIp) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();

@@ -32,6 +32,18 @@ data/
 partitions.csv      分区表：factory 3MiB + storage(SPIFFS) 1MiB（0x310000）
 ```
 
+## C/C++ 代码格式化
+
+`main/` 目录中的 C/C++ 源文件统一使用项目根目录的 `.clang-format` 配置进行格式化。执行以下 PowerShell 命令可格式化全部源文件：
+
+```powershell
+Get-ChildItem main -Recurse -File |
+    Where-Object { $_.Extension -in '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp' } |
+    ForEach-Object { clang-format --style=file -i $_.FullName }
+```
+
+提交代码前请先执行格式化。CI 会在 Push 和 Pull Request 时检查 `main/` 目录的代码格式，不符合项目配置的提交将检查失败。
+
 ## JSON 依赖与离线测试
 
 固件 JSON 解析与序列化统一使用 `mittelab/nlohmann-json`，依赖声明在 `main/idf_component.yml` 中，由 ESP-IDF 组件管理器下载。首次配置该组件时，CMake 还会从上游下载单头文件，需要联网。

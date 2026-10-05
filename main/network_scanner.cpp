@@ -9,22 +9,22 @@
 #include "lwip/etharp.h"
 #include "lwip/sockets.h"
 
-#include <arpa/inet.h>
 #include <algorithm>
+#include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
 #include <format>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <utility>
-#include <memory>
 
 static const char *TAG = "SCAN";
 
 namespace {
 
-constexpr uint32_t PING_BATCH = 8;       // 每批 ping 数（须 < ARP 表 10 格，防挤掉）
-constexpr uint32_t PING_ROUND_MS = 300;  // 每批收包窗口
-constexpr uint16_t PING_ID = 0xE532;     // ICMP id，过滤他人流量
+constexpr uint32_t PING_BATCH = 8; // 每批 ping 数（须 < ARP 表 10 格，防挤掉）
+constexpr uint32_t PING_ROUND_MS = 300; // 每批收包窗口
+constexpr uint16_t PING_ID = 0xE532;    // ICMP id，过滤他人流量
 constexpr size_t MAX_DEVICES = 64;
 
 /**
@@ -35,8 +35,8 @@ struct __attribute__((packed)) IcmpEcho {
     uint8_t code;
     uint16_t checksum;
     uint16_t id;
-    uint16_t seq;   // 复用为目标主机地址末字节（1..254）
-    uint32_t tsUs;  // 发送时刻（微秒）
+    uint16_t seq;  // 复用为目标主机地址末字节（1..254）
+    uint32_t tsUs; // 发送时刻（微秒）
 };
 
 /**
@@ -49,8 +49,10 @@ uint16_t checksum(const uint8_t *data, size_t len) {
         data += 2;
         len -= 2;
     }
-    if (len == 1) sum += data[0] << 8;
-    while (sum >> 16) sum = (sum & 0xFFFF) + (sum >> 16);
+    if (len == 1)
+        sum += data[0] << 8;
+    while (sum >> 16)
+        sum = (sum & 0xFFFF) + (sum >> 16);
     return ~static_cast<uint16_t>(sum);
 }
 
@@ -58,9 +60,12 @@ uint16_t checksum(const uint8_t *data, size_t len) {
  * @brief 按 TTL 猜操作系统（初始值：Windows 128 / 类 Unix 64 / 网络设备 255）
  */
 std::string guessOs(uint8_t ttl) {
-    if (ttl >= 250) return "Network device";
-    if (ttl >= 120) return "Windows";
-    if (ttl >= 60) return "Linux/macOS/Mobile";
+    if (ttl >= 250)
+        return "Network device";
+    if (ttl >= 120)
+        return "Windows";
+    if (ttl >= 60)
+        return "Linux/macOS/Mobile";
     return "Unknown";
 }
 
@@ -70,18 +75,21 @@ std::string guessOs(uint8_t ttl) {
  */
 DeviceInfo *getOrCreate(std::vector<DeviceInfo> &list, uint32_t ipHost) {
     for (auto &d : list) {
-        if (d.ipHost == ipHost) return &d;
+        if (d.ipHost == ipHost)
+            return &d;
     }
-    if (list.size() >= MAX_DEVICES) return nullptr;
-    DeviceInfo d {};
+    if (list.size() >= MAX_DEVICES)
+        return nullptr;
+    DeviceInfo d{};
     d.ipHost = ipHost;
     list.push_back(d);
     return &list.back();
 }
 
 std::string ipToString(uint32_t ipHost) {
-    return std::format("{}.{}.{}.{}", (ipHost >> 24) & 0xFF, (ipHost >> 16) & 0xFF,
-                       (ipHost >> 8) & 0xFF, ipHost & 0xFF);
+    return std::format("{}.{}.{}.{}", (ipHost >> 24) & 0xFF,
+                       (ipHost >> 16) & 0xFF, (ipHost >> 8) & 0xFF,
+                       ipHost & 0xFF);
 }
 
 /**
@@ -90,27 +98,30 @@ std::string ipToString(uint32_t ipHost) {
 struct SocketGuard {
     int fd = -1;
     explicit SocketGuard(int value) : fd(value) {}
-    ~SocketGuard() { if (fd >= 0) lwip_close(fd); }
+    ~SocketGuard() {
+        if (fd >= 0)
+            lwip_close(fd);
+    }
     SocketGuard(const SocketGuard &) = delete;
     SocketGuard &operator=(const SocketGuard &) = delete;
 };
 
 std::string macToString(const uint8_t mac[6]) {
-    return std::format("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", (unsigned)mac[0],
-                       (unsigned)mac[1], (unsigned)mac[2], (unsigned)mac[3],
-                       (unsigned)mac[4], (unsigned)mac[5]);
+    return std::format("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                       (unsigned)mac[0], (unsigned)mac[1], (unsigned)mac[2],
+                       (unsigned)mac[3], (unsigned)mac[4], (unsigned)mac[5]);
 }
 
 /**
  * @brief 发送一个 ICMP echo request
  */
 void pingSend(int sock, uint32_t ipHost) {
-    struct sockaddr_in dst {};
+    struct sockaddr_in dst{};
     dst.sin_family = AF_INET;
     dst.sin_addr.s_addr = htonl(ipHost);
 
-    IcmpEcho pkt {};
-    pkt.type = 8;  // echo request
+    IcmpEcho pkt{};
+    pkt.type = 8; // echo request
     pkt.id = PING_ID;
     pkt.seq = static_cast<uint16_t>(ipHost & 0xFF);
     pkt.tsUs = static_cast<uint32_t>(esp_timer_get_time());
@@ -128,27 +139,34 @@ void pingRecv(int sock, std::vector<DeviceInfo> &found) {
     fd_set fds;
     FD_ZERO(&fds);
     FD_SET(sock, &fds);
-    struct timeval tv { .tv_sec = 0, .tv_usec = 50 * 1000 };
-    if (lwip_select(sock + 1, &fds, nullptr, nullptr, &tv) <= 0) return;
+    struct timeval tv{.tv_sec = 0, .tv_usec = 50 * 1000};
+    if (lwip_select(sock + 1, &fds, nullptr, nullptr, &tv) <= 0)
+        return;
 
     uint8_t buf[128];
-    struct sockaddr_in from {};
+    struct sockaddr_in from{};
     socklen_t fromLen = sizeof(from);
-    int len = lwip_recvfrom(sock, buf, sizeof(buf), 0,
-                            reinterpret_cast<struct sockaddr *>(&from), &fromLen);
-    if (len < 20 + static_cast<int>(sizeof(IcmpEcho))) return;
+    int len =
+        lwip_recvfrom(sock, buf, sizeof(buf), 0,
+                      reinterpret_cast<struct sockaddr *>(&from), &fromLen);
+    if (len < 20 + static_cast<int>(sizeof(IcmpEcho)))
+        return;
 
     uint8_t versionIhl = buf[0];
-    if ((versionIhl >> 4) != 4) return;
+    if ((versionIhl >> 4) != 4)
+        return;
     size_t ihl = (versionIhl & 0x0F) * 4;
-    if (static_cast<int>(ihl + sizeof(IcmpEcho)) > len) return;
+    if (static_cast<int>(ihl + sizeof(IcmpEcho)) > len)
+        return;
 
     uint32_t srcHost = ntohl(from.sin_addr.s_addr);
     uint8_t ttl = buf[8];
     auto *icmp = reinterpret_cast<IcmpEcho *>(buf + ihl);
-    if (icmp->type != 0 || icmp->id != PING_ID) return;
+    if (icmp->type != 0 || icmp->id != PING_ID)
+        return;
 
-    if (DeviceInfo *d = getOrCreate(found, srcHost); d != nullptr && !d->viaPing) {
+    if (DeviceInfo *d = getOrCreate(found, srcHost);
+        d != nullptr && !d->viaPing) {
         d->viaPing = true;
         d->ttl = ttl;
         d->rttUs = static_cast<uint32_t>(esp_timer_get_time()) - icmp->tsUs;
@@ -164,8 +182,10 @@ void snapshotArp(std::vector<DeviceInfo> &found) {
         ip4_addr_t *ip = nullptr;
         struct netif *netif = nullptr;
         struct eth_addr *mac = nullptr;
-        if (!etharp_get_entry(i, &ip, &netif, &mac)) continue;
-        if (ip == nullptr || mac == nullptr || netif == nullptr) continue;
+        if (!etharp_get_entry(i, &ip, &netif, &mac))
+            continue;
+        if (ip == nullptr || mac == nullptr || netif == nullptr)
+            continue;
 
         uint32_t ipHost = ntohl(ip->addr);
         if (DeviceInfo *d = getOrCreate(found, ipHost)) {
@@ -174,7 +194,7 @@ void snapshotArp(std::vector<DeviceInfo> &found) {
     }
 }
 
-}  // namespace
+} // namespace
 
 NetworkScanner &NetworkScanner::instance() {
     static NetworkScanner scanner;
@@ -203,7 +223,7 @@ void NetworkScanner::scanTaskEntry(void *arg) {
 
 void NetworkScanner::runScan() {
     esp_netif_t *netif = esp_netif_get_default_netif();
-    esp_netif_ip_info_t ipInfo {};
+    esp_netif_ip_info_t ipInfo{};
     if (netif == nullptr || esp_netif_get_ip_info(netif, &ipInfo) != ESP_OK) {
         ESP_LOGE(TAG, "无 IP，扫描取消");
         return;
@@ -211,16 +231,17 @@ void NetworkScanner::runScan() {
     uint32_t selfHost = ntohl(ipInfo.ip.addr);
     uint32_t netBase = selfHost & 0xFFFFFF00;
 
-    SocketGuard socketGuard {lwip_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)};
+    SocketGuard socketGuard{lwip_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)};
     int sock = socketGuard.fd;
     if (sock < 0) {
         ESP_LOGE(TAG, "raw socket 创建失败: %s", strerror(errno));
         return;
     }
 
-    ESP_LOGI(TAG, "%s", std::format("开始扫描 {}.{}.{}.0/24", (netBase >> 24) & 0xFF,
-                                    (netBase >> 16) & 0xFF, (netBase >> 8) & 0xFF)
-                          .c_str());
+    ESP_LOGI(TAG, "%s",
+             std::format("开始扫描 {}.{}.{}.0/24", (netBase >> 24) & 0xFF,
+                         (netBase >> 16) & 0xFF, (netBase >> 8) & 0xFF)
+                 .c_str());
 
     std::vector<DeviceInfo> found;
     found.reserve(32);
@@ -239,7 +260,8 @@ void NetworkScanner::runScan() {
     }
 
     // 收尾：晚到的回包 + 最终 ARP
-    uint32_t deadline = static_cast<uint32_t>(esp_timer_get_time()) + 1000 * 1000;
+    uint32_t deadline =
+        static_cast<uint32_t>(esp_timer_get_time()) + 1000 * 1000;
     while (static_cast<uint32_t>(esp_timer_get_time()) < deadline) {
         pingRecv(sock, found);
     }
@@ -261,7 +283,9 @@ void NetworkScanner::runScan() {
 
     // IP 升序
     std::sort(found.begin(), found.end(),
-              [](const DeviceInfo &a, const DeviceInfo &b) { return a.ipHost < b.ipHost; });
+              [](const DeviceInfo &a, const DeviceInfo &b) {
+                  return a.ipHost < b.ipHost;
+              });
 
     size_t count = 0;
     {
@@ -291,7 +315,8 @@ std::string NetworkScanner::devicesJson() const {
                            {"ping", device.viaPing},
                            {"os", device.osGuess}});
     }
-    const Json root = {{"scanning", busy_.load()}, {"count", copy.size()},
+    const Json root = {{"scanning", busy_.load()},
+                       {"count", copy.size()},
                        {"devices", std::move(entries)}};
     return root.dump(-1, ' ', false, Json::error_handler_t::replace);
 }

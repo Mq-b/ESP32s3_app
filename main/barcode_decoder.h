@@ -11,7 +11,8 @@ struct BarcodeScanResult {
 
 /**
  * @brief 解码有界 JPEG 并识别条码，不保存图像或执行网络操作。
- * @note 调用方须串行使用；原图单边最大 4096 像素，保留原始分辨率识别，输入缓冲在返回前须有效。
+ * @note 调用方须串行使用；原图单边最大 4096
+ * 像素，保留原始分辨率识别，输入缓冲在返回前须有效。
  */
 class BarcodeDecoder {
 public:
@@ -23,5 +24,6 @@ public:
      * @param frameId 浏览器帧编号，原样返回用于过滤迟到结果。
      * @return JSON 扫码结果及 HTTP 状态码；尺寸与四角均使用原图坐标。
      */
-    static BarcodeScanResult scan(const uint8_t *data, size_t size, const char *path, uint32_t frameId);
+    static BarcodeScanResult scan(const uint8_t *data, size_t size,
+                                  const char *path, uint32_t frameId);
 };

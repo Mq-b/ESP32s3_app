@@ -22,9 +22,11 @@ struct DecodeJob {
 void workerEntry(void *) {
     DecodeJob *job = nullptr;
     for (;;) {
-        if (xQueueReceive(jobs, &job, portMAX_DELAY) != pdTRUE) continue;
+        if (xQueueReceive(jobs, &job, portMAX_DELAY) != pdTRUE)
+            continue;
         try {
-            *job->result = BarcodeDecoder::scan(job->data, job->size, job->path, job->frameId);
+            *job->result = BarcodeDecoder::scan(job->data, job->size, job->path,
+                                                job->frameId);
         } catch (...) {
             // 连错误 JSON 都无法分配时仍必须唤醒 HTTP，避免永久等待。
             job->result->httpStatus = 503;
@@ -38,11 +40,13 @@ void workerEntry(void *) {
 } // namespace
 
 esp_err_t BarcodeWorker::start() {
-    if (jobs) return ESP_OK;
+    if (jobs)
+        return ESP_OK;
     jobs = xQueueCreate(1, sizeof(DecodeJob *));
-    if (!jobs) return ESP_ERR_NO_MEM;
-    if (xTaskCreatePinnedToCore(workerEntry, "barcode_decode", 24 * 1024, nullptr, 2,
-                                nullptr, 1) != pdPASS) {
+    if (!jobs)
+        return ESP_ERR_NO_MEM;
+    if (xTaskCreatePinnedToCore(workerEntry, "barcode_decode", 24 * 1024,
+                                nullptr, 2, nullptr, 1) != pdPASS) {
         vQueueDelete(jobs);
         jobs = nullptr;
         return ESP_ERR_NO_MEM;
@@ -51,15 +55,19 @@ esp_err_t BarcodeWorker::start() {
     return ESP_OK;
 }
 
-esp_err_t BarcodeWorker::scan(const uint8_t *data, size_t size, const char *path,
-                             uint32_t frameId, BarcodeScanResult &result) {
-    if (!jobs) return ESP_ERR_INVALID_STATE;
+esp_err_t BarcodeWorker::scan(const uint8_t *data, size_t size,
+                              const char *path, uint32_t frameId,
+                              BarcodeScanResult &result) {
+    if (!jobs)
+        return ESP_ERR_INVALID_STATE;
     SemaphoreHandle_t completed = xSemaphoreCreateBinary();
-    if (!completed) return ESP_ERR_NO_MEM;
+    if (!completed)
+        return ESP_ERR_NO_MEM;
     DecodeJob job{data, size, path, frameId, &result, completed};
     DecodeJob *pointer = &job;
     const BaseType_t sent = xQueueSend(jobs, &pointer, 0);
-    if (sent == pdTRUE) xSemaphoreTake(completed, portMAX_DELAY);
+    if (sent == pdTRUE)
+        xSemaphoreTake(completed, portMAX_DELAY);
     vSemaphoreDelete(completed);
     return sent == pdTRUE ? ESP_OK : ESP_ERR_INVALID_STATE;
 }

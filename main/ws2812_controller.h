@@ -89,7 +89,7 @@ private:
     led_strip_handle_t strip_ = nullptr;
     mutable std::mutex mutex_;
     Ws2812Mode mode_ = Ws2812Mode::Off;
-    Ws2812Color color_ {16, 16, 16};
+    Ws2812Color color_{16, 16, 16};
     uint32_t onMs_ = 500;
     uint32_t offMs_ = 500;
 };

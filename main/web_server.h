@@ -16,7 +16,8 @@ public:
      * @param scanner 用于执行内网扫描的对象，调用期间必须保持有效。
      * @param led 用于控制板载 WS2812 的对象，调用期间必须保持有效。
      */
-    WebServer(NetworkScanner &scanner, Ws2812Controller &led) : scanner_(scanner), led_(led) {}
+    WebServer(NetworkScanner &scanner, Ws2812Controller &led)
+        : scanner_(scanner), led_(led) {}
 
     /**
      * @brief 启动 80 端口 HTTP 服务。

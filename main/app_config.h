@@ -5,7 +5,8 @@
 #include <string>
 
 /**
- * @brief 应用网络配置，优先读取蓝牙保存的 NVS 副本，其次读取 SPIFFS 的 wifi.json。
+ * @brief 应用网络配置，优先读取蓝牙保存的 NVS 副本，其次读取 SPIFFS 的
+ * wifi.json。
  */
 class AppConfig {
 public:
@@ -28,7 +29,8 @@ public:
      * @param error 失败原因，不包含密码。
      * @return 配置是否有效。
      */
-    static bool parse(const std::string &json, AppConfig &config, std::string &error);
+    static bool parse(const std::string &json, AppConfig &config,
+                      std::string &error);
 
     /**
      * @brief 保存配置到 NVS 并同步 wifi.json，下次启动生效。

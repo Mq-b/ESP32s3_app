@@ -7,7 +7,7 @@
 namespace {
 constexpr uint32_t RMT_RESOLUTION_HZ = 10 * 1000 * 1000;
 constexpr uint32_t MIN_BLINK_INTERVAL_MS = 10;
-}
+} // namespace
 
 Ws2812Controller::Ws2812Controller(int gpioNum) {
     const led_strip_config_t stripConfig = {
@@ -15,22 +15,26 @@ Ws2812Controller::Ws2812Controller(int gpioNum) {
         .max_leds = 1,
         .led_model = LED_MODEL_WS2812,
         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
-        .flags = {
-            .invert_out = false,
-        },
+        .flags =
+            {
+                .invert_out = false,
+            },
     };
     const led_strip_rmt_config_t rmtConfig = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = RMT_RESOLUTION_HZ,
         .mem_block_symbols = 0,
-        .flags = {
-            .with_dma = false,
-        },
+        .flags =
+            {
+                .with_dma = false,
+            },
     };
-    ESP_ERROR_CHECK(led_strip_new_rmt_device(&stripConfig, &rmtConfig, &strip_));
+    ESP_ERROR_CHECK(
+        led_strip_new_rmt_device(&stripConfig, &rmtConfig, &strip_));
     ESP_ERROR_CHECK(led_strip_clear(strip_));
 
-    BaseType_t result = xTaskCreate(taskEntry, "ws2812", 3072, this, 4, nullptr);
+    BaseType_t result =
+        xTaskCreate(taskEntry, "ws2812", 3072, this, 4, nullptr);
     ESP_ERROR_CHECK(result == pdPASS ? ESP_OK : ESP_FAIL);
 }
 
@@ -47,7 +51,8 @@ void Ws2812Controller::turnOff() {
     turnOffLocked();
 }
 
-void Ws2812Controller::startBlinking(Ws2812Color color, uint32_t onMs, uint32_t offMs) {
+void Ws2812Controller::startBlinking(Ws2812Color color, uint32_t onMs,
+                                     uint32_t offMs) {
     std::lock_guard<std::mutex> lock(mutex_);
     color_ = color;
     onMs_ = onMs < MIN_BLINK_INTERVAL_MS ? MIN_BLINK_INTERVAL_MS : onMs;
@@ -104,7 +109,8 @@ void Ws2812Controller::taskLoop() {
 }
 
 void Ws2812Controller::applyColorLocked(Ws2812Color color) {
-    ESP_ERROR_CHECK(led_strip_set_pixel(strip_, 0, color.red, color.green, color.blue));
+    ESP_ERROR_CHECK(
+        led_strip_set_pixel(strip_, 0, color.red, color.green, color.blue));
     ESP_ERROR_CHECK(led_strip_refresh(strip_));
 }
 

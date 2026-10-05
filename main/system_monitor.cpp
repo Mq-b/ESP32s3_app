@@ -34,15 +34,14 @@ Json heapJson(uint32_t caps) {
  * @param value 使用率百分比，范围为 0 至 100。
  * @return 保留一位小数精度的 JSON 数值。
  */
-Json percentJson(double value) {
-    return std::round(value * 10.0) / 10.0;
-}
+Json percentJson(double value) { return std::round(value * 10.0) / 10.0; }
 
-}  // namespace
+} // namespace
 
 std::string SystemMonitor::statusJson() {
     const int64_t nowUs = esp_timer_get_time();
-#if configGENERATE_RUN_TIME_STATS && CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER
+#if configGENERATE_RUN_TIME_STATS &&                                           \
+    CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER
     // 使用 64 位微秒计数；仅更新足够长的采样窗口，避免多浏览器缩短采样周期。
     if (previousTimeUs_ == 0 || nowUs - previousTimeUs_ >= 1000000) {
         std::array<uint64_t, portNUM_PROCESSORS> idle{};
@@ -50,10 +49,14 @@ std::string SystemMonitor::statusJson() {
             idle[core] = ulTaskGetIdleRunTimeCounterForCore(core);
         }
         if (previousTimeUs_ != 0) {
-            const auto elapsedUs = static_cast<uint64_t>(nowUs - previousTimeUs_);
+            const auto elapsedUs =
+                static_cast<uint64_t>(nowUs - previousTimeUs_);
             for (size_t core = 0; core < idle.size(); ++core) {
                 const uint64_t idleDelta = idle[core] - previousIdle_[core];
-                usage_[core] = 100.0 * (1.0 - static_cast<double>(std::min(idleDelta, elapsedUs)) / elapsedUs);
+                usage_[core] =
+                    100.0 *
+                    (1.0 - static_cast<double>(std::min(idleDelta, elapsedUs)) /
+                               elapsedUs);
             }
             sampleWindowMs_ = elapsedUs / 1000;
             cpuReady_ = true;
@@ -72,21 +75,29 @@ std::string SystemMonitor::statusJson() {
 
     size_t storageTotal = 0;
     size_t storageUsed = 0;
-    const bool storageAvailable = esp_spiffs_info("storage", &storageTotal, &storageUsed) == ESP_OK;
+    const bool storageAvailable =
+        esp_spiffs_info("storage", &storageTotal, &storageUsed) == ESP_OK;
     uint32_t flashBytes = 0;
-    const bool flashAvailable = esp_flash_get_size(nullptr, &flashBytes) == ESP_OK;
+    const bool flashAvailable =
+        esp_flash_get_size(nullptr, &flashBytes) == ESP_OK;
 
     const Json root = {
         {"uptime_ms", nowUs / 1000},
         {"task_count", uxTaskGetNumberOfTasks()},
-        {"memory", {{"internal", heapJson(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)},
-                    {"psram", heapJson(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)}}},
-        {"storage", {{"available", storageAvailable}, {"total_bytes", storageTotal},
-                     {"used_bytes", storageUsed}}},
+        {"memory",
+         {{"internal", heapJson(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)},
+          {"psram", heapJson(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)}}},
+        {"storage",
+         {{"available", storageAvailable},
+          {"total_bytes", storageTotal},
+          {"used_bytes", storageUsed}}},
         {"flash_bytes", flashAvailable ? Json(flashBytes) : Json(nullptr)},
-        {"cpu", {{"available", cpuReady_}, {"sample_window_ms", sampleWindowMs_},
-                 {"sample_age_ms", cpuReady_ ? (nowUs - previousTimeUs_) / 1000 : 0},
-                 {"usage_percent", cpuReady_ ? percentJson(average / usage_.size()) : Json(nullptr)},
-                 {"cores_percent", std::move(cores)}}}};
+        {"cpu",
+         {{"available", cpuReady_},
+          {"sample_window_ms", sampleWindowMs_},
+          {"sample_age_ms", cpuReady_ ? (nowUs - previousTimeUs_) / 1000 : 0},
+          {"usage_percent",
+           cpuReady_ ? percentJson(average / usage_.size()) : Json(nullptr)},
+          {"cores_percent", std::move(cores)}}}};
     return root.dump();
 }
