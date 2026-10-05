@@ -7,3 +7,4 @@ CompileFlags:
     - -fno-tree-switch-conversion
     - -fzero-init-padding-bits=all
     - -fno-malloc-dce
+    - -mdisable-hardware-atomics
