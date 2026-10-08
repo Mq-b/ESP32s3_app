@@ -3,13 +3,16 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
+#include "esp_netif_net_stack.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lwip/etharp.h"
 #include "lwip/sockets.h"
+#include "lwip/tcpip.h"
 
 #include <algorithm>
+#include <array>
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
@@ -22,10 +25,11 @@ static const char *TAG = "SCAN";
 
 namespace {
 
-constexpr uint32_t PING_BATCH = 8; // 每批 ping 数（须 < ARP 表 10 格，防挤掉）
+constexpr uint32_t PING_BATCH = 4; // 留出 ARP 表空间，避免背景流量挤掉本批响应
 constexpr uint32_t PING_ROUND_MS = 300; // 每批收包窗口
 constexpr uint16_t PING_ID = 0xE532;    // ICMP id，过滤他人流量
-constexpr size_t MAX_DEVICES = 64;
+constexpr uint32_t PROBE_ATTEMPTS = 2; // 对瞬时丢包和休眠设备补探一次
+constexpr size_t MAX_DEVICES = 254;
 
 /**
  * @brief ICMP echo 报文（收发同构）
@@ -122,10 +126,10 @@ void pingSend(int sock, uint32_t ipHost) {
 
     IcmpEcho pkt{};
     pkt.type = 8; // echo request
-    pkt.id = PING_ID;
-    pkt.seq = static_cast<uint16_t>(ipHost & 0xFF);
+    pkt.id = htons(PING_ID);
+    pkt.seq = htons(static_cast<uint16_t>(ipHost & 0xFF));
     pkt.tsUs = static_cast<uint32_t>(esp_timer_get_time());
-    pkt.checksum = checksum(reinterpret_cast<uint8_t *>(&pkt), sizeof(pkt));
+    pkt.checksum = htons(checksum(reinterpret_cast<uint8_t *>(&pkt), sizeof(pkt)));
 
     lwip_sendto(sock, &pkt, sizeof(pkt), 0,
                 reinterpret_cast<struct sockaddr *>(&dst), sizeof(dst));
@@ -162,7 +166,7 @@ void pingRecv(int sock, std::vector<DeviceInfo> &found) {
     uint32_t srcHost = ntohl(from.sin_addr.s_addr);
     uint8_t ttl = buf[8];
     auto *icmp = reinterpret_cast<IcmpEcho *>(buf + ihl);
-    if (icmp->type != 0 || icmp->id != PING_ID)
+    if (icmp->type != 0 || ntohs(icmp->id) != PING_ID)
         return;
 
     if (DeviceInfo *d = getOrCreate(found, srcHost);
@@ -174,23 +178,85 @@ void pingRecv(int sock, std::vector<DeviceInfo> &found) {
 }
 
 /**
- * @brief 快照 lwIP ARP 表，把 (IP, MAC) 合并进结果。
- *        每批 ping 后调用，绕开 ARP 表条目少被挤掉的问题。
+ * @brief 跨线程传递主动 ARP 探测范围与发送失败数量。
  */
-void snapshotArp(std::vector<DeviceInfo> &found) {
+struct ArpProbe {
+    struct netif *interface;
+    uint32_t netBase;
+    uint32_t firstHost;
+    uint32_t endHost;
+    uint32_t failures{};
+};
+
+/**
+ * @brief 在 TCP/IP 线程主动探测本批地址，不依赖已有 ARP 缓存状态。
+ * @param arg 同步回调期间有效的 ArpProbe 指针。
+ */
+void probeArpOnTcpip(void *arg) {
+    auto &probe = *static_cast<ArpProbe *>(arg);
+    for (uint32_t host = probe.firstHost; host < probe.endHost; ++host) {
+        ip4_addr_t target{};
+        target.addr = htonl(probe.netBase + host);
+        // 空报文查询强制发送 ARP 请求，同时为首次出现的地址建立待解析项。
+        if (etharp_query(probe.interface, &target, nullptr) != ERR_OK)
+            ++probe.failures;
+    }
+}
+
+/** @brief ARP 表快照中的纯数据条目，避免在 TCP/IP 线程分配动态内存。 */
+struct ArpEntry {
+    uint32_t ipHost{};
+    uint8_t mac[6]{};
+};
+
+/** @brief 同步快照上下文，仅收集扫描接口和当前 /24 网段的条目。 */
+struct ArpSnapshot {
+    struct netif *interface;
+    uint32_t netBase;
+    std::array<ArpEntry, ARP_TABLE_SIZE> entries{};
+    size_t count{};
+};
+
+/**
+ * @brief 在 TCP/IP 线程拷贝 ARP 表，避免与收包和老化过程并发访问。
+ * @param arg 同步回调期间有效的 ArpSnapshot 指针。
+ */
+void snapshotArpOnTcpip(void *arg) {
+    auto &snapshot = *static_cast<ArpSnapshot *>(arg);
     for (int i = 0; i < ARP_TABLE_SIZE; i++) {
         ip4_addr_t *ip = nullptr;
-        struct netif *netif = nullptr;
+        struct netif *interface = nullptr;
         struct eth_addr *mac = nullptr;
-        if (!etharp_get_entry(i, &ip, &netif, &mac))
+        if (!etharp_get_entry(i, &ip, &interface, &mac) ||
+            ip == nullptr || mac == nullptr || interface != snapshot.interface)
             continue;
-        if (ip == nullptr || mac == nullptr || netif == nullptr)
-            continue;
-
         uint32_t ipHost = ntohl(ip->addr);
-        if (DeviceInfo *d = getOrCreate(found, ipHost)) {
-            memcpy(d->mac, mac->addr, 6);
-        }
+        if ((ipHost & 0xFFFFFF00) != snapshot.netBase ||
+            (ipHost & 0xFF) == 0 || (ipHost & 0xFF) == 255)
+            continue;
+        auto &entry = snapshot.entries[snapshot.count++];
+        entry.ipHost = ipHost;
+        memcpy(entry.mac, mac->addr, sizeof(entry.mac));
+    }
+}
+
+/**
+ * @brief 同步获取 ARP 快照，并在扫描任务中合并设备结果。
+ * @param found 当前轮的设备列表，不跨轮保留历史设备。
+ * @param interface 本轮扫描使用的 lwIP 网络接口。
+ * @param netBase 当前 /24 网段的主机字节序网络地址。
+ */
+void snapshotArp(std::vector<DeviceInfo> &found, struct netif *interface,
+                 uint32_t netBase) {
+    ArpSnapshot snapshot{interface, netBase};
+    if (tcpip_callback_wait(snapshotArpOnTcpip, &snapshot) != ERR_OK) {
+        ESP_LOGW(TAG, "获取 ARP 快照失败");
+        return;
+    }
+    for (size_t i = 0; i < snapshot.count; ++i) {
+        const auto &entry = snapshot.entries[i];
+        if (DeviceInfo *device = getOrCreate(found, entry.ipHost))
+            memcpy(device->mac, entry.mac, sizeof(entry.mac));
     }
 }
 
@@ -228,6 +294,11 @@ void NetworkScanner::runScan() {
         ESP_LOGE(TAG, "无 IP，扫描取消");
         return;
     }
+    auto *interface = static_cast<struct netif *>(esp_netif_get_netif_impl(netif));
+    if (interface == nullptr || ipInfo.ip.addr == 0) {
+        ESP_LOGE(TAG, "网络接口未就绪，扫描取消");
+        return;
+    }
     uint32_t selfHost = ntohl(ipInfo.ip.addr);
     uint32_t netBase = selfHost & 0xFFFFFF00;
 
@@ -246,26 +317,34 @@ void NetworkScanner::runScan() {
     std::vector<DeviceInfo> found;
     found.reserve(32);
 
-    // 分批：8 个一批，批间快照 ARP（表只有 10 格，批大了会挤掉旧条目）
+    // 每批主动 ARP + ICMP，周期快照及时保存响应，防止小容量 ARP 表覆盖条目。
     for (uint32_t base = 1; base <= 254; base += PING_BATCH) {
-        for (uint32_t h = base; h < base + PING_BATCH && h <= 254; h++) {
-            pingSend(sock, netBase + h);
+        uint32_t endHost = std::min(base + PING_BATCH, uint32_t{255});
+        for (uint32_t attempt = 0; attempt < PROBE_ATTEMPTS; ++attempt) {
+            ArpProbe probe{interface, netBase, base, endHost};
+            if (tcpip_callback_wait(probeArpOnTcpip, &probe) != ERR_OK ||
+                probe.failures != 0)
+                ESP_LOGW(TAG, "本批 ARP 探测发送失败，起始地址末字节: %lu",
+                         static_cast<unsigned long>(base));
+            for (uint32_t host = base; host < endHost; ++host) {
+                if (netBase + host != selfHost)
+                    pingSend(sock, netBase + host);
+            }
+            // 使用 64 位时间，避免运行约 71 分钟后微秒计数截断导致窗口失效。
+            int64_t deadline = esp_timer_get_time() + PING_ROUND_MS * 1000;
+            while (esp_timer_get_time() < deadline) {
+                pingRecv(sock, found);
+                snapshotArp(found, interface, netBase);
+            }
         }
-        uint32_t deadline =
-            static_cast<uint32_t>(esp_timer_get_time()) + PING_ROUND_MS * 1000;
-        while (static_cast<uint32_t>(esp_timer_get_time()) < deadline) {
-            pingRecv(sock, found);
-        }
-        snapshotArp(found);
     }
 
-    // 收尾：晚到的回包 + 最终 ARP
-    uint32_t deadline =
-        static_cast<uint32_t>(esp_timer_get_time()) + 1000 * 1000;
-    while (static_cast<uint32_t>(esp_timer_get_time()) < deadline) {
+    // 收尾期间也持续快照，接住晚到的 ARP 和 ICMP 响应。
+    int64_t deadline = esp_timer_get_time() + 1000 * 1000;
+    while (esp_timer_get_time() < deadline) {
         pingRecv(sock, found);
+        snapshotArp(found, interface, netBase);
     }
-    snapshotArp(found);
 
     // 本机自己也列出来
     if (DeviceInfo *self = getOrCreate(found, selfHost)) {
