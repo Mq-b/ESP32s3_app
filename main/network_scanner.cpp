@@ -12,8 +12,8 @@
 #include "lwip/tcpip.h"
 
 #include <algorithm>
-#include <array>
 #include <arpa/inet.h>
+#include <array>
 #include <cerrno>
 #include <cstring>
 #include <format>
@@ -28,7 +28,7 @@ namespace {
 constexpr uint32_t PING_BATCH = 4; // 留出 ARP 表空间，避免背景流量挤掉本批响应
 constexpr uint32_t PING_ROUND_MS = 300; // 每批收包窗口
 constexpr uint16_t PING_ID = 0xE532;    // ICMP id，过滤他人流量
-constexpr uint32_t PROBE_ATTEMPTS = 2; // 对瞬时丢包和休眠设备补探一次
+constexpr uint32_t PROBE_ATTEMPTS = 2;  // 对瞬时丢包和休眠设备补探一次
 constexpr size_t MAX_DEVICES = 254;
 
 /**
@@ -129,7 +129,8 @@ void pingSend(int sock, uint32_t ipHost) {
     pkt.id = htons(PING_ID);
     pkt.seq = htons(static_cast<uint16_t>(ipHost & 0xFF));
     pkt.tsUs = static_cast<uint32_t>(esp_timer_get_time());
-    pkt.checksum = htons(checksum(reinterpret_cast<uint8_t *>(&pkt), sizeof(pkt)));
+    pkt.checksum =
+        htons(checksum(reinterpret_cast<uint8_t *>(&pkt), sizeof(pkt)));
 
     lwip_sendto(sock, &pkt, sizeof(pkt), 0,
                 reinterpret_cast<struct sockaddr *>(&dst), sizeof(dst));
@@ -227,12 +228,12 @@ void snapshotArpOnTcpip(void *arg) {
         ip4_addr_t *ip = nullptr;
         struct netif *interface = nullptr;
         struct eth_addr *mac = nullptr;
-        if (!etharp_get_entry(i, &ip, &interface, &mac) ||
-            ip == nullptr || mac == nullptr || interface != snapshot.interface)
+        if (!etharp_get_entry(i, &ip, &interface, &mac) || ip == nullptr ||
+            mac == nullptr || interface != snapshot.interface)
             continue;
         uint32_t ipHost = ntohl(ip->addr);
-        if ((ipHost & 0xFFFFFF00) != snapshot.netBase ||
-            (ipHost & 0xFF) == 0 || (ipHost & 0xFF) == 255)
+        if ((ipHost & 0xFFFFFF00) != snapshot.netBase || (ipHost & 0xFF) == 0 ||
+            (ipHost & 0xFF) == 255)
             continue;
         auto &entry = snapshot.entries[snapshot.count++];
         entry.ipHost = ipHost;
@@ -294,7 +295,8 @@ void NetworkScanner::runScan() {
         ESP_LOGE(TAG, "无 IP，扫描取消");
         return;
     }
-    auto *interface = static_cast<struct netif *>(esp_netif_get_netif_impl(netif));
+    auto *interface =
+        static_cast<struct netif *>(esp_netif_get_netif_impl(netif));
     if (interface == nullptr || ipInfo.ip.addr == 0) {
         ESP_LOGE(TAG, "网络接口未就绪，扫描取消");
         return;
